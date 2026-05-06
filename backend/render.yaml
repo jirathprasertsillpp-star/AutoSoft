@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: autosoft-backend
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: node dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: autosoft-db
+          property: connectionString
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+    healthCheckPath: /health
+
+databases:
+  - name: autosoft-db
+    plan: free
+    region: singapore
