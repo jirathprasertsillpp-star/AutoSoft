@@ -21,8 +21,8 @@ export default function AnimatedBackground() {
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: -1, overflow: 'hidden', background: colors.bg }}>
-      <video autoPlay loop muted playsInline style={{position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover', zIndex:-2}} src="https://www.w3schools.com/html/mov_bbb.webm" />
-      <div style={{ position: 'absolute', inset: 0, background: isLight ? 'linear-gradient(to bottom, #FFFFFF, #F8F5F2)' : 'linear-gradient(to bottom, #0A0705, #110C08)', opacity: 0.8 }} />
+      <div style={{ position: 'absolute', inset: 0, background: isLight ? 'linear-gradient(135deg, #FAFAFA 0%, #F0EDE8 100%)' : 'linear-gradient(135deg, #0A0705 0%, #15110E 100%)', zIndex: -2 }} />
+      <div style={{ position: 'absolute', inset: 0, background: isLight ? 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.8))' : 'linear-gradient(to bottom, transparent, rgba(10,7,5,0.8))', opacity: 0.8 }} />
 
       {/* Grid overlay for tech feel */}
       <div style={{
