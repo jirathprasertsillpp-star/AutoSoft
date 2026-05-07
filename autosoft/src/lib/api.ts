@@ -100,6 +100,8 @@ export const api = {
     }),
   getChatHistory: (sessionId = 'default') =>
     request<{ data: any[] }>(`/api/chat/history?sessionId=${sessionId}`),
+  clearChatHistory: (sessionId = 'default') =>
+    request<{ success: boolean }>(`/api/chat/history?sessionId=${sessionId}`, { method: 'DELETE' }),
 
   // ── Documents ────────────────────────────────────────────────
   getDocuments: () => request<{ data: any[] }>('/api/documents'),
