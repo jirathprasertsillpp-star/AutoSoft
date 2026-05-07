@@ -1,6 +1,10 @@
 // ─── Autosoft API Client ────────────────────────────────────────
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
 
+if (process.env.NODE_ENV === 'production' && BASE_URL.includes('localhost')) {
+  console.warn('⚠️ NEXT_PUBLIC_API_URL is not set. API calls will default to localhost and likely fail in production.')
+}
+
 function getToken(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem('autosoft_token')

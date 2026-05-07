@@ -139,7 +139,7 @@ export default function FinancePage() {
   const exportCSV = () => {
     // We use a direct link to the backend endpoint for the most accurate server-side data
     const token = localStorage.getItem('autosoft_token')
-    const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/transactions/export/csv?token=${token}`
+    const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/api/transactions/export/csv?token=${token}`
     window.open(url, '_blank')
     showToast('กำลังดาวน์โหลด CSV...')
   }

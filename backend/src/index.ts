@@ -66,27 +66,34 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 // ── Start Server ─────────────────────────────────────────────────
 const PORT = Number(process.env.PORT) || 4000
 
-async function start() {
+// Initialization logic
+async function initialize() {
   try {
     if (process.env.DATABASE_URL) {
       await initSchema()
-    } else {
-      // SQLite: init by importing (side-effect registers schema + seeds)
+    } else if (!process.env.VERCEL) {
+      // Only use SQLite for local development (not on Vercel)
       await import('./lib/db-sqlite')
     }
-    app.listen(PORT, () => {
-      const db = process.env.DATABASE_URL ? '🐘 PostgreSQL (Neon)' : '🗄️  SQLite (local)'
-      const ai = process.env.GEMINI_API_KEY ? '🤖 Gemini 2.0 Flash' : '⚠️  AI not configured'
-      console.log(`🚀 Autosoft Backend → http://localhost:${PORT}`)
-      console.log(`📦 Database: ${db}`)
-      console.log(`${ai}`)
-      console.log(`📋 Health: http://localhost:${PORT}/health`)
-    })
   } catch (err) {
-    console.error('Failed to start server:', err)
-    process.exit(1)
+    console.error('Failed to initialize database:', err)
+    if (!process.env.VERCEL) process.exit(1)
   }
 }
 
-start()
+// Trigger initialization
+initialize()
+
+// Standard Express listen (only for non-Vercel environments)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    const db = process.env.DATABASE_URL ? '🐘 PostgreSQL (Neon)' : '🗄️  SQLite (local)'
+    const ai = process.env.GEMINI_API_KEY ? '🤖 Gemini 2.0 Flash' : '⚠️  AI not configured'
+    console.log(`🚀 Autosoft Backend → http://localhost:${PORT}`)
+    console.log(`📦 Database: ${db}`)
+    console.log(`${ai}`)
+    console.log(`📋 Health: http://localhost:${PORT}/health`)
+  })
+}
+
 export default app

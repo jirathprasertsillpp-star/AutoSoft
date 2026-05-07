@@ -57,7 +57,12 @@ export function newId(): string {
 
 // ── Schema Init (PostgreSQL only) ────────────────────────────────
 export async function initSchema(): Promise<void> {
-  if (!pool) return
+  if (!pool) {
+    if (process.env.VERCEL) {
+      console.warn('⚠️ DATABASE_URL is not set on Vercel. Database operations will fail.')
+    }
+    return
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS companies (
