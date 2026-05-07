@@ -84,16 +84,19 @@ if (parseInt(existing.c) === 0) {
   const cid = randomUUID(), uid = randomUUID()
   const hash = bcrypt.hashSync('demo1234', 10)
   db.prepare('INSERT INTO companies (id,name,slug,industry,size) VALUES (?,?,?,?,?)').run(cid,'Autosoft Demo Company','autosoft-demo','Technology','SME')
-  db.prepare(`INSERT INTO users (id,company_id,name,email,password_hash,role,department,color,phone,salary,status) VALUES (?,?,?,?,?,'CEO','Executive','#C4956A','081-234-5678','120,000','active')`).run(uid,cid,'คุณสมชาย วงศ์ใหญ่','demo@autosoft.com',hash)
-  const employees = [
-    ['คุณสมหญิง รักงาน','hr@demo.com','HR Manager','HR','#6B8E6E','082-111-2222','65,000'],
-    ['คุณประสิทธิ์ บัญชีดี','finance@demo.com','Finance Manager','Finance','#3498DB','083-333-4444','70,000'],
-    ['คุณวิภา ขายเก่ง','sales@demo.com','Sales Manager','Sales','#9B59B6','084-555-6666','60,000'],
-    ['คุณมานะ ตั้งใจทำ','dev@demo.com','Developer','IT','#E67E22','085-777-8888','55,000'],
-    ['คุณสมศรี ใจดี','marketing@demo.com','Marketing Lead','Marketing','#1ABC9C','086-999-0000','58,000'],
+  
+  // ── Users Seed (Simple: Name + Role) ──────────────────────────
+  const users = [
+    [randomUUID(), 'Admin', 'admin@autosoft.com', 'admin', 'Management', '#B48648'],
+    [randomUUID(), 'Somsak (Finance)', 'finance@autosoft.com', 'finance', 'Finance', '#3498DB'],
+    [randomUUID(), 'Somying (HR)', 'hr@autosoft.com', 'hr', 'HR', '#6B8E6E'],
+    [randomUUID(), 'Wipa (Sales)', 'sales@autosoft.com', 'sales', 'Sales', '#9B59B6'],
+    [randomUUID(), 'Mana (IT)', 'it@autosoft.com', 'it', 'IT', '#E67E22'],
+    [randomUUID(), 'Somsri (Marketing)', 'marketing@autosoft.com', 'marketing', 'Marketing', '#1ABC9C'],
   ]
-  const ins = db.prepare(`INSERT INTO users (id,company_id,name,email,password_hash,role,department,color,phone,salary,status) VALUES (?,?,?,?,?,?,?,?,?,?,'active')`)
-  for (const [n,e,r,d,c,p,s] of employees) ins.run(randomUUID(),cid,n,e,bcrypt.hashSync('demo1234',10),r,d,c,p,s)
+  const ins = db.prepare(`INSERT INTO users (id,company_id,name,email,password_hash,role,department,color,status) VALUES (?,?,?,?,?,?,?,?,'active')`)
+  for (const [id,n,e,r,d,c] of users) ins.run(id,cid,n,e,hash,r,d,c)
+
   const txns = [
     ['ค่าเช่าออฟฟิศ เดือน พ.ค.',45000,'expense','ค่าใช้จ่าย','approved'],
     ['รายได้จากโปรเจค Website ABC Corp',180000,'income','รายได้','approved'],

@@ -133,27 +133,28 @@ async function seedDemoPG(): Promise<void> {
   const existing = await queryOne('SELECT COUNT(*)::int as c FROM users', [])
   if ((existing?.c ?? 0) > 0) return
 
-  const companyId = newId(), userId = newId()
+  const companyId = newId()
   const hash = bcrypt.hashSync('demo1234', 10)
 
   await run(`INSERT INTO companies (id,name,slug,industry,size) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (slug) DO NOTHING`,
     [companyId, 'Autosoft Demo Company', 'autosoft-demo', 'Technology', 'SME'])
-  await run(`INSERT INTO users (id,company_id,name,email,password_hash,role,department,color,phone,salary,status)
-    VALUES ($1,$2,$3,$4,$5,'CEO','Executive','#C4956A','081-234-5678','120,000','active') ON CONFLICT (email) DO NOTHING`,
-    [userId, companyId, 'คุณสมชาย วงศ์ใหญ่', 'demo@autosoft.com', hash])
 
-  const emps = [
-    ['คุณสมหญิง รักงาน','hr@demo.com','HR Manager','HR','#6B8E6E','082-111-2222','65,000'],
-    ['คุณประสิทธิ์ บัญชีดี','finance@demo.com','Finance Manager','Finance','#3498DB','083-333-4444','70,000'],
-    ['คุณวิภา ขายเก่ง','sales@demo.com','Sales Manager','Sales','#9B59B6','084-555-6666','60,000'],
-    ['คุณมานะ ตั้งใจทำ','dev@demo.com','Developer','IT','#E67E22','085-777-8888','55,000'],
-    ['คุณสมศรี ใจดี','marketing@demo.com','Marketing Lead','Marketing','#1ABC9C','086-999-0000','58,000'],
+  // ── Users Seed (Simple: Name + Role) ──────────────────────────
+  const users = [
+    [newId(), 'Admin', 'admin@autosoft.com', 'admin', 'Management', '#B48648'],
+    [newId(), 'Somsak (Finance)', 'finance@autosoft.com', 'finance', 'Finance', '#3498DB'],
+    [newId(), 'Somying (HR)', 'hr@autosoft.com', 'hr', 'HR', '#6B8E6E'],
+    [newId(), 'Wipa (Sales)', 'sales@autosoft.com', 'sales', 'Sales', '#9B59B6'],
+    [newId(), 'Mana (IT)', 'it@autosoft.com', 'it', 'IT', '#E67E22'],
+    [newId(), 'Somsri (Marketing)', 'marketing@autosoft.com', 'marketing', 'Marketing', '#1ABC9C'],
   ]
-  for (const [n,e,r,d,c,p,s] of emps) {
-    await run(`INSERT INTO users (id,company_id,name,email,password_hash,role,department,color,phone,salary,status)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active') ON CONFLICT (email) DO NOTHING`,
-      [newId(),companyId,n,e,bcrypt.hashSync('demo1234',10),r,d,c,p,s])
+  for (const [id,n,e,r,d,c] of users) {
+    await run(`INSERT INTO users (id,company_id,name,email,password_hash,role,department,color,status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'active') ON CONFLICT (email) DO NOTHING`,
+      [id,companyId,n,e,hash,r,d,c])
   }
+  const userId = users[0][0] // Use Admin as default for txns/deals
+
   const txns: any[][] = [
     ['ค่าเช่าออฟฟิศ เดือน พ.ค.',45000,'expense','ค่าใช้จ่าย','approved'],
     ['รายได้จากโปรเจค Website ABC Corp',180000,'income','รายได้','approved'],

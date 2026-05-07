@@ -15,26 +15,26 @@ const NAV_SECTIONS = [
   {
     titleKey: 'nav.section.modules',
     items: [
-      { id: 'dashboard', key: 'nav.dashboard', Icon: LayoutDashboard, path: '/dashboard' },
-      { id: 'people',    key: 'nav.people',    Icon: Users,            path: '/dashboard/people' },
-      { id: 'finance',   key: 'nav.finance',   Icon: Wallet,           path: '/dashboard/finance' },
-      { id: 'sales',     key: 'nav.sales',     Icon: Target,           path: '/dashboard/sales' },
-      { id: 'marketing', key: 'nav.marketing', Icon: Megaphone,        path: '/dashboard/marketing' },
+      { id: 'dashboard', key: 'nav.dashboard', Icon: LayoutDashboard, path: '/dashboard', roles: ['admin'] },
+      { id: 'people',    key: 'nav.people',    Icon: Users,            path: '/dashboard/people', roles: ['admin', 'hr'] },
+      { id: 'finance',   key: 'nav.finance',   Icon: Wallet,           path: '/dashboard/finance', roles: ['admin', 'finance'] },
+      { id: 'sales',     key: 'nav.sales',     Icon: Target,           path: '/dashboard/sales', roles: ['admin', 'sales'] },
+      { id: 'marketing', key: 'nav.marketing', Icon: Megaphone,        path: '/dashboard/marketing', roles: ['admin', 'marketing'] },
     ],
   },
   {
     titleKey: 'nav.section.ai',
     items: [
-      { id: 'meeting',  key: 'nav.meeting',  Icon: Mic2,         path: '/dashboard/meeting' },
-      { id: 'gpt',      key: 'nav.gpt',      Icon: MessageSquare,path: '/dashboard/gpt' },
-      { id: 'guardian', key: 'nav.guardian', Icon: ShieldCheck,  path: '/dashboard/guardian' },
-      { id: 'ai',       key: 'nav.ai',       Icon: Zap,          path: '/dashboard/ai' },
+      { id: 'meeting',  key: 'nav.meeting',  Icon: Mic2,         path: '/dashboard/meeting', roles: ['admin', 'finance', 'hr', 'it', 'sales'] },
+      { id: 'gpt',      key: 'nav.gpt',      Icon: MessageSquare,path: '/dashboard/gpt',     roles: ['admin', 'hr', 'it', 'marketing'] },
+      { id: 'guardian', key: 'nav.guardian', Icon: ShieldCheck,  path: '/dashboard/guardian',roles: ['admin', 'finance', 'it'] },
+      { id: 'ai',       key: 'nav.ai',       Icon: Zap,          path: '/dashboard/ai',      roles: ['admin', 'it'] },
     ],
   },
   {
     titleKey: 'nav.section.system',
     items: [
-      { id: 'settings', key: 'nav.settings', Icon: Settings, path: '/dashboard/settings' },
+      { id: 'settings', key: 'nav.settings', Icon: Settings, path: '/dashboard/settings', roles: ['admin', 'it'] },
     ],
   },
 ]
@@ -170,40 +170,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Nav */}
         <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '12px 0' }}>
-          {NAV_SECTIONS.map(section => (
-            <div key={section.titleKey} style={{ marginBottom: 8 }}>
-              {!collapsed && (
-                <div style={{ padding: '12px 24px 4px', fontSize: 9, fontWeight: 700, color: colors.text3, letterSpacing: 2 }}>
-                  {t(section.titleKey)}
-                </div>
-              )}
-              {section.items.map(({ id, key, Icon, path }) => {
-                const isActive = activeItem.id === id
-                return (
-                  <div key={id} onClick={() => router.push(path)}
-                    title={collapsed ? t(key) : undefined}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      padding: collapsed ? '12px 0' : '10px 24px',
-                      cursor: 'pointer', transition: 'all 0.2s',
-                      background: isActive ? colors.goldLight : 'transparent',
-                      borderRight: isActive ? `3px solid ${colors.gold}` : '3px solid transparent',
-                      justifyContent: collapsed ? 'center' : 'flex-start',
-                    }}
-                    onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = colors.surface2 }}
-                    onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
-                  >
-                    <Icon size={18} style={{ color: isActive ? colors.gold : colors.text3, flexShrink: 0, transition: 'color 0.2s' }} />
-                    {!collapsed && (
-                      <span style={{ fontSize: 13.5, fontWeight: isActive ? 600 : 500, color: isActive ? colors.gold : colors.text2, whiteSpace: 'nowrap', transition: 'color 0.2s' }}>
-                        {t(key)}
-                      </span>
-                    )}
+          {NAV_SECTIONS.map(section => {
+            const visibleItems = section.items.filter(item => 
+              item.roles.includes(user.role?.toLowerCase())
+            )
+            if (visibleItems.length === 0) return null
+
+            return (
+              <div key={section.titleKey} style={{ marginBottom: 8 }}>
+                {!collapsed && (
+                  <div style={{ padding: '12px 24px 4px', fontSize: 9, fontWeight: 700, color: colors.text3, letterSpacing: 2 }}>
+                    {t(section.titleKey)}
                   </div>
-                )
-              })}
-            </div>
-          ))}
+                )}
+                {visibleItems.map(({ id, key, Icon, path }) => {
+                  const isActive = activeItem.id === id
+                  return (
+                    <div key={id} onClick={() => router.push(path)}
+                      title={collapsed ? t(key) : undefined}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: collapsed ? '12px 0' : '10px 24px',
+                        cursor: 'pointer', transition: 'all 0.2s',
+                        background: isActive ? colors.goldLight : 'transparent',
+                        borderRight: isActive ? `3px solid ${colors.gold}` : '3px solid transparent',
+                        justifyContent: collapsed ? 'center' : 'flex-start',
+                      }}
+                      onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = colors.surface2 }}
+                      onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+                    >
+                      <Icon size={18} style={{ color: isActive ? colors.gold : colors.text3, flexShrink: 0, transition: 'color 0.2s' }} />
+                      {!collapsed && (
+                        <span style={{ fontSize: 13.5, fontWeight: isActive ? 600 : 500, color: isActive ? colors.gold : colors.text2, whiteSpace: 'nowrap', transition: 'color 0.2s' }}>
+                          {t(key)}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
         </nav>
 
         {/* User Footer */}
