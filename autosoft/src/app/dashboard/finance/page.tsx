@@ -3,10 +3,11 @@ import { useState, useRef } from 'react'
 import { Ic, StatCard, MiniChart, Badge, Field, Input, Select, Tabs, ProgressBar, Modal, EmptyState, Toast } from '@/lib/ui'
 import { useApp } from '@/lib/theme'
 import { useAppData } from '@/lib/data'
+import { api } from '@/lib/api'
 
 export default function FinancePage() {
   const { colors: C } = useApp()
-  const { transactions, setTransactions } = useAppData()
+  const { transactions, setTransactions, refresh } = useAppData()
   const [activeTab, setActiveTab] = useState('upload')
   const [ocrState, setOcrState] = useState<'idle'|'scanning'|'done'>('idle')
   const [ocrData, setOcrData] = useState({name:'',date:'',total:'',tax:'',cat:'ค่าใช้จ่าย'})
@@ -19,6 +20,13 @@ export default function FinancePage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const toBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = error => reject(error);
+  });
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -27,30 +35,37 @@ export default function FinancePage() {
     const iv = setInterval(()=>setProgress(p=>p<90?p+5:p), 200)
 
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('mode', 'finance');
-
-      const res = await fetch('/api/gemini', { method: 'POST', body: fd });
+      const base64 = await toBase64(file);
+      // We use the Next.js API route as a proxy or we could create a backend endpoint
+      // Given the previous setup, let's use the /api/gemini frontend route but make sure it works
+      const res = await fetch('/api/gemini', { 
+        method: 'POST', 
+        body: (() => {
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('mode', 'finance');
+          return fd;
+        })()
+      });
       const data = await res.json();
       
       clearInterval(iv);
       setProgress(100);
 
-      if (data.result) {
-        try {
-          const parsed = JSON.parse(data.result.replace(/```json/g,'').replace(/```/g,'').trim());
-          setOcrData({
-            name: parsed.name || '',
-            date: parsed.date || '',
-            total: parsed.total || '',
-            tax: parsed.tax || '',
-            cat: parsed.cat || 'ค่าใช้จ่าย'
-          });
-        } catch(err) {
-           showToast('อ่านข้อมูลไม่สมบูรณ์', 'error');
-        }
+      if (data.error) {
+        showToast(data.error || 'OCR ล้มเหลว', 'error');
+        setOcrState('idle');
+        return;
       }
+
+      const parsed = data.result || {}
+      setOcrData({
+        name:  parsed.name  || '',
+        date:  parsed.date  || '',
+        total: String(parsed.total || ''),
+        tax:   String(parsed.tax   || '0'),
+        cat:   parsed.cat   || 'ค่าใช้จ่าย',
+      })
       setTimeout(()=>setOcrState('done'), 500);
     } catch(err) {
       clearInterval(iv);
@@ -59,41 +74,82 @@ export default function FinancePage() {
     }
   }
 
-  const saveOcr = () => {
-    const n = {id:Date.now(),desc:`ซื้อที่ ${ocrData.name}`,amount:parseInt(ocrData.total.replace(/,/g,'')),cat:ocrData.cat,date:ocrData.date.slice(0,5),status:'approved',type:'expense'}
-    setTransactions(t=>[n,...t])
-    setOcrState('idle')
-    setOcrData({name:'',date:'',total:'',tax:'',cat:'ค่าใช้จ่าย'})
-    showToast('บันทึกรายการสำเร็จ')
-    setActiveTab('transactions')
+  const saveOcr = async () => {
+    const amount = parseFloat(ocrData.total.replace(/,/g,'').replace(/[^0-9.]/g,'')) || 0
+    if (!ocrData.name && !amount) { showToast('ข้อมูลไม่ครบ กรุณาแก้ไข','error'); return }
+    
+    try {
+      const res = await api.createTransaction({
+        desc: `ซื้อที่ ${ocrData.name || 'ร้านค้า'}`,
+        amount,
+        cat: ocrData.cat,
+        date: ocrData.date || new Date().toISOString().slice(0, 10),
+        type: 'expense',
+        status: 'pending'
+      });
+      
+      setTransactions(t => [res.data, ...t])
+      setOcrState('idle')
+      setOcrData({name:'',date:'',total:'',tax:'',cat:'ค่าใช้จ่าย'})
+      showToast('บันทึกรายการจากใบเสร็จสำเร็จ')
+      setActiveTab('transactions')
+    } catch (err: any) {
+      showToast(err.message || 'บันทึกไม่สำเร็จ', 'error');
+    }
   }
 
-  const approve = (id:number) => { setTransactions(ts=>ts.map(t=>t.id===id?{...t,status:'approved'}:t)); showToast('อนุมัติแล้ว') }
-  const reject  = (id:number) => { setTransactions(ts=>ts.filter(t=>t.id!==id)); showToast('ปฏิเสธและลบแล้ว') }
+  const approve = async (id: string) => {
+    try {
+      await api.updateTransactionStatus(id, 'approved');
+      setTransactions(ts => ts.map(t => t.id === id ? { ...t, status: 'approved' } : t));
+      showToast('อนุมัติรายการแล้ว');
+    } catch (err: any) {
+      showToast(err.message || 'อัปเดตไม่สำเร็จ', 'error');
+    }
+  }
 
-  const addTx = () => {
-    if(!addForm.desc||!addForm.amount){showToast('กรุณากรอกข้อมูล','error');return}
-    setTransactions(ts=>[{id:Date.now(),...addForm,amount:parseInt(addForm.amount),status:'pending',date:addForm.date||new Date().toLocaleDateString('th-TH')},...ts])
-    setShowAdd(false)
-    setAddForm({desc:'',amount:'',cat:'ค่าใช้จ่าย',type:'expense',date:''})
-    showToast('เพิ่มรายการแล้ว')
+  const removeTx = async (id: string) => {
+    try {
+      await api.deleteTransaction(id);
+      setTransactions(ts => ts.filter(t => t.id !== id));
+      showToast('ลบรายการแล้ว');
+    } catch (err: any) {
+      showToast(err.message || 'ลบไม่สำเร็จ', 'error');
+    }
+  }
+
+  const addTx = async () => {
+    if(!addForm.desc || !addForm.amount){showToast('กรุณากรอกข้อมูล','error');return}
+    try {
+      const res = await api.createTransaction({
+        ...addForm,
+        amount: parseFloat(addForm.amount),
+        date: addForm.date || new Date().toISOString().slice(0, 10),
+        status: 'pending'
+      });
+      setTransactions(ts => [res.data, ...ts])
+      setShowAdd(false)
+      setAddForm({desc:'',amount:'',cat:'ค่าใช้จ่าย',type:'expense',date:''})
+      showToast('เพิ่มรายการสำเร็จ')
+    } catch (err: any) {
+      showToast(err.message || 'เพิ่มไม่สำเร็จ', 'error');
+    }
   }
 
   const filtered = filter==='all' ? transactions : transactions.filter(t=>t.status===filter||t.type===filter)
-  const income   = transactions.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0)
-  const expense  = transactions.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0)
+  const income   = transactions.filter(t=>t.type==='income').reduce((s,t)=>s + (Number(t.amount)||0),0)
+  const expense  = transactions.filter(t=>t.type==='expense').reduce((s,t)=>s + (Number(t.amount)||0),0)
   const pending  = transactions.filter(t=>t.status==='pending').length
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:16,animation:'fadeIn 0.3s ease'}}>
-      {/* Header */}
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}}>
         <div>
           <div style={{fontSize:18,fontWeight:800,color:C.text}}>Finance Center</div>
-          <div style={{fontSize:12,color:C.text3,marginTop:2}}>บัญชี · OCR ใบเสร็จ · รายงาน</div>
+          <div style={{fontSize:12,color:C.text3,marginTop:2}}>จัดการบัญชีและ OCR ใบเสร็จอัตโนมัติ</div>
         </div>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={()=>showToast('Export PDF สำเร็จ')} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:10,background:'rgba(255,255,255,0.06)',border:`1px solid ${C.border2}`,color:C.text2,cursor:'pointer',fontSize:12,fontWeight:600}}>
+          <button onClick={()=>showToast('กำลังเตรียมไฟล์...')} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:10,background:'rgba(255,255,255,0.06)',border:`1px solid ${C.border2}`,color:C.text2,cursor:'pointer',fontSize:12,fontWeight:600}}>
             <Ic n="download" s={13}/>Export PDF
           </button>
           <button onClick={()=>setShowAdd(true)} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:10,background:`linear-gradient(135deg,${C.gold},${C.gold2})`,border:'none',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,boxShadow:`0 4px 14px ${C.gold}44`}}>
@@ -102,24 +158,21 @@ export default function FinancePage() {
         </div>
       </div>
 
-      {/* KPIs */}
       <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-        <StatCard icon="trending" label="รายได้เดือนนี้" value={`฿${(income/1000).toFixed(0)}K`} trend={0} color={C.green} chart={[0]}/>
-        <StatCard icon="dollar"   label="ค่าใช้จ่าย"    value={`฿${(expense/1000).toFixed(0)}K`} trend={0} color={C.red}   chart={[0]}/>
-        <StatCard icon="zap"      label="กำไรสุทธิ"     value={`฿${((income-expense)/1000).toFixed(0)}K`} trend={0} color={C.gold}/>
-        <StatCard icon="file"     label="รอ Approve"    value={pending} sub="รายการ" color={C.blue}/>
+        <StatCard icon="trending" label="รายได้รวม" value={`฿${income.toLocaleString()}`} color={C.green}/>
+        <StatCard icon="dollar"   label="รายจ่ายรวม" value={`฿${expense.toLocaleString()}`} color={C.red}/>
+        <StatCard icon="zap"      label="กำไรสุทธิ"  value={`฿${(income-expense).toLocaleString()}`} color={C.gold}/>
+        <StatCard icon="file"     label="รออนุมัติ"   value={pending} sub="รายการ" color={C.blue}/>
       </div>
 
       <div style={{display:'flex',gap:16,alignItems:'flex-start',flexWrap:'wrap'}}>
-        {/* Main Panel */}
         <div style={{flex:2,minWidth:300,display:'flex',flexDirection:'column',gap:12}}>
           <Tabs
-            tabs={[{id:'upload',icon:'upload',label:'OCR ใบเสร็จ'},{id:'transactions',icon:'file',label:'รายการ'},{id:'reports',icon:'trending',label:'รายงาน'}]}
+            tabs={[{id:'upload',icon:'upload',label:'OCR ใบเสร็จ'},{id:'transactions',icon:'file',label:'รายการล่าสุด'},{id:'reports',icon:'trending',label:'วิเคราะห์ข้อมูล'}]}
             active={activeTab}
             onChange={setActiveTab}
           />
 
-          {/* ── OCR Tab ── */}
           {activeTab==='upload'&&(
             <div style={{display:'flex',flexDirection:'column',gap:12}}>
               {ocrState==='idle'&&(
@@ -128,56 +181,55 @@ export default function FinancePage() {
                   onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=C.gold;(e.currentTarget as HTMLDivElement).style.background=`${C.gold}08`;}}
                   onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=C.border2;(e.currentTarget as HTMLDivElement).style.background='transparent';}}>
                   <input type="file" ref={fileInputRef} style={{display:'none'}} accept="image/*,application/pdf" onChange={handleFileUpload} />
-                  <Ic n="upload" s={36} c={C.text3}/>
-                  <div style={{fontSize:14,fontWeight:600,color:C.text2}}>อัปโหลดไฟล์ใบเสร็จ (AI OCR)</div>
-                  <div style={{fontSize:12,color:C.text3}}>PDF, JPG, PNG — สกัดข้อมูลด้วย Gemini 2.5 Flash</div>
-                  <button style={{padding:'8px 20px',borderRadius:10,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,color:C.gold,cursor:'pointer',fontSize:12,fontWeight:600}}>เลือกไฟล์</button>
+                  <Ic n="upload" s={40} c={C.text3}/>
+                  <div style={{fontSize:14,fontWeight:700,color:C.text2}}>สแกนใบเสร็จด้วย Gemini 2.0</div>
+                  <div style={{fontSize:11,color:C.text3}}>ระบบจะแยกข้อมูลร้านค้า วันที่ ยอดรวม และภาษีให้โดยอัตโนมัติ</div>
+                  <button style={{padding:'8px 20px',borderRadius:10,background:`${C.gold}22`,border:`1px solid ${C.gold}44`,color:C.gold,cursor:'pointer',fontSize:12,fontWeight:600}}>คลิกเพื่ออัปโหลด</button>
                 </div>
               )}
 
               {ocrState==='scanning'&&(
-                <div style={{padding:32,display:'flex',flexDirection:'column',alignItems:'center',gap:16,background:C.surface,borderRadius:14,border:`1px solid ${C.border}`}}>
-                  <div style={{animation:'spin 1s linear infinite'}}><Ic n="cpu" s={36} c={C.gold}/></div>
-                  <div style={{fontSize:14,fontWeight:600,color:C.text}}>AI กำลังอ่านใบเสร็จ...</div>
-                  <div style={{width:'100%',maxWidth:300}}>
+                <div style={{padding:40,display:'flex',flexDirection:'column',alignItems:'center',gap:16,background:C.surface,borderRadius:16,border:`1px solid ${C.border}`}}>
+                  <div style={{animation:'spin 1s linear infinite'}}><Ic n="cpu" s={40} c={C.gold}/></div>
+                  <div style={{fontSize:15,fontWeight:700,color:C.text}}>AI กำลังประมวลผลใบเสร็จ...</div>
+                  <div style={{width:'100%',maxWidth:320}}>
                     <ProgressBar pct={progress} color={C.gold} height={8}/>
-                    <div style={{fontSize:11,color:C.text3,textAlign:'center',marginTop:6}}>{progress}%</div>
                   </div>
-                  {['ถอดข้อความ','แยกหมวดหมู่','ตรวจสอบ'].map((s,i)=>(
-                    <div key={s} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:progress>i*33?C.gold:C.text3}}>
-                      {progress>i*33 ? <Ic n="check" s={13} c={C.gold}/> : <div style={{width:13,height:13}}/>}
-                      {s}
-                    </div>
-                  ))}
+                  <div style={{fontSize:11,color:C.text3}}>{progress}% Processing...</div>
                 </div>
               )}
 
               {ocrState==='done'&&(
-                <div style={{background:C.surface,border:`1px solid ${C.gold}44`,borderRadius:14,padding:18,animation:'fadeIn 0.3s ease'}}>
-                  <div style={{fontSize:13,fontWeight:700,color:C.gold,marginBottom:14,display:'flex',alignItems:'center',gap:6}}>
-                    <Ic n="check" s={16} c={C.gold}/>ข้อมูลที่แยกได้
+                <div style={{background:C.surface,border:`1px solid ${C.gold}44`,borderRadius:16,padding:20,animation:'fadeIn 0.3s ease'}}>
+                  <div style={{fontSize:14,fontWeight:800,color:C.gold,marginBottom:16,display:'flex',alignItems:'center',gap:8}}>
+                    <Ic n="check" s={18} c={C.gold}/>ข้อมูลที่ Gemini สกัดออกมาได้
                   </div>
-                  <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:14}}>
-                    {([['ชื่อร้าน','name'],['วันที่','date'],['ยอดรวม','total'],['ภาษี 7%','tax']] as [string,string][]).map(([label,key])=>(
+                  <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:20}}>
+                    {[
+                      {label:'ร้านค้า', key:'name'},
+                      {label:'วันที่', key:'date'},
+                      {label:'ยอดรวม (฿)', key:'total'},
+                      {label:'VAT 7% (฿)', key:'tax'}
+                    ].map(({label, key}) => (
                       <div key={key} style={{display:'flex',gap:12,alignItems:'center'}}>
-                        <span style={{fontSize:12,color:C.text3,width:80,flexShrink:0}}>{label}</span>
+                        <span style={{fontSize:12,color:C.text3,width:90,flexShrink:0}}>{label}</span>
                         <input value={(ocrData as any)[key]} onChange={e=>setOcrData({...ocrData,[key]:e.target.value})}
-                          style={{flex:1,background:'rgba(255,255,255,0.05)',border:`1px solid ${C.border2}`,borderRadius:8,padding:'7px 12px',color:C.text,fontFamily:'Montserrat',fontSize:12,outline:'none'}}/>
+                          style={{flex:1,background:'rgba(255,255,255,0.05)',border:`1px solid ${C.border2}`,borderRadius:10,padding:'10px 14px',color:C.text,fontFamily:'Montserrat',fontSize:13,outline:'none'}}/>
                       </div>
                     ))}
                     <div style={{display:'flex',gap:12,alignItems:'center'}}>
-                      <span style={{fontSize:12,color:C.text3,width:80,flexShrink:0}}>หมวดหมู่</span>
+                      <span style={{fontSize:12,color:C.text3,width:90,flexShrink:0}}>หมวดหมู่</span>
                       <div style={{flex:1}}>
-                        <Select value={ocrData.cat} onChange={e=>setOcrData({...ocrData,cat:e.target.value})} options={['ค่าใช้จ่าย','Marketing','IT & อุปกรณ์','ทรัพย์สิน','อื่นๆ']}/>
+                        <Select value={ocrData.cat} onChange={e=>setOcrData({...ocrData,cat:e.target.value})} options={['ค่าใช้จ่าย','Marketing','IT & อุปกรณ์','ทรัพย์สิน','อาหาร','เดินทาง','อื่นๆ']}/>
                       </div>
                     </div>
                   </div>
-                  <div style={{display:'flex',gap:8}}>
-                    <button onClick={saveOcr} style={{flex:1,padding:'10px',borderRadius:10,background:`linear-gradient(135deg,${C.green},${C.green}99)`,border:'none',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                      <Ic n="check" s={14}/>บันทึก
+                  <div style={{display:'flex',gap:10}}>
+                    <button onClick={saveOcr} style={{flex:2,padding:'12px',borderRadius:12,background:`linear-gradient(135deg,${C.green},${C.green}99)`,border:'none',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+                      <Ic n="check" s={16}/>บันทึกลงฐานข้อมูล
                     </button>
-                    <button onClick={()=>setOcrState('idle')} style={{flex:1,padding:'10px',borderRadius:10,background:C.redL,border:`1px solid ${C.red}44`,color:C.red,cursor:'pointer',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                      <Ic n="x" s={14}/>ยกเลิก
+                    <button onClick={()=>setOcrState('idle')} style={{flex:1,padding:'12px',borderRadius:12,background:C.redL,border:`1px solid ${C.red}44`,color:C.red,cursor:'pointer',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+                      <Ic n="x" s={16}/>ทิ้งรายการ
                     </button>
                   </div>
                 </div>
@@ -185,141 +237,109 @@ export default function FinancePage() {
             </div>
           )}
 
-          {/* ── Transactions Tab ── */}
           {activeTab==='transactions'&&(
-            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            <div style={{display:'flex',flexDirection:'column',gap:12}}>
               <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                 {(['all','pending','approved','income','expense'] as string[]).map(f=>(
                   <button key={f} onClick={()=>setFilter(f)}
-                    style={{padding:'5px 12px',borderRadius:99,fontSize:11,fontWeight:500,cursor:'pointer',background:filter===f?C.goldLight:'transparent',color:filter===f?C.gold:C.text3,border:`1px solid ${filter===f?C.gold+'44':C.border}`,transition:'all 0.15s'}}>
-                    {f==='all'?'ทั้งหมด':f==='pending'?'รอ':f==='approved'?'อนุมัติ':f==='income'?'รายได้':'รายจ่าย'}
+                    style={{padding:'6px 14px',borderRadius:99,fontSize:11,fontWeight:600,cursor:'pointer',background:filter===f?C.goldLight:'transparent',color:filter===f?C.gold:C.text3,border:`1px solid ${filter===f?C.gold+'44':C.border}`,transition:'all 0.15s'}}>
+                    {f==='all'?'ทั้งหมด':f==='pending'?'รออนุมัติ':f==='approved'?'อนุมัติแล้ว':f==='income'?'รายได้':'รายจ่าย'}
                   </button>
                 ))}
               </div>
 
-              <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}>
-                <div style={{display:'grid',gridTemplateColumns:'1fr auto auto auto auto',padding:'10px 16px',borderBottom:`1px solid ${C.border}`,gap:12}}>
-                  {['รายการ','จำนวน','หมวด','สถานะ',''].map((h,i)=>(
-                    <div key={i} style={{fontSize:11,fontWeight:700,color:C.text3}}>{h}</div>
+              <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,overflow:'hidden'}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 100px 100px 100px 80px',padding:'12px 20px',borderBottom:`1px solid ${C.border}`,gap:12}}>
+                  {['รายการ','จำนวน','หมวดหมู่','สถานะ',''].map((h,i)=>(
+                    <div key={i} style={{fontSize:11,fontWeight:800,color:C.text3, textTransform:'uppercase', letterSpacing:1}}>{h}</div>
                   ))}
                 </div>
                 {filtered.map(t=>(
                   <div key={t.id}
-                    style={{display:'grid',gridTemplateColumns:'1fr auto auto auto auto',padding:'12px 16px',borderBottom:`1px solid ${C.border}`,gap:12,alignItems:'center',transition:'background 0.15s',cursor:'pointer'}}
+                    style={{display:'grid',gridTemplateColumns:'1fr 100px 100px 100px 80px',padding:'14px 20px',borderBottom:`1px solid ${C.border}`,gap:12,alignItems:'center',transition:'background 0.15s'}}
                     onMouseEnter={e=>(e.currentTarget as HTMLDivElement).style.background='rgba(255,255,255,0.03)'}
                     onMouseLeave={e=>(e.currentTarget as HTMLDivElement).style.background='transparent'}>
                     <div>
-                      <div style={{fontSize:12,color:C.text,fontWeight:500}}>{t.desc}</div>
-                      <div style={{fontSize:11,color:C.text3}}>{t.date}</div>
+                      <div style={{fontSize:13,color:C.text,fontWeight:600}}>{t.description || t.desc}</div>
+                      <div style={{fontSize:11,color:C.text3, marginTop:2}}>{t.date}</div>
                     </div>
-                    <div style={{fontSize:13,fontWeight:700,color:t.type==='income'?C.green:C.red,textAlign:'right'}}>
-                      {t.type==='income'?'+':'-'}฿{t.amount.toLocaleString()}
+                    <div style={{fontSize:14,fontWeight:800,color:t.type==='income'?C.green:C.red}}>
+                      {t.type==='income'?'+':'-'}฿{(Number(t.amount)||0).toLocaleString()}
                     </div>
-                    <Badge type="gold">{t.cat}</Badge>
-                    <Badge type={t.status==='approved'?'green':'blue'}>
-                      {t.status==='approved'?'✓ อนุมัติ':'⏳ รอ'}
-                    </Badge>
-                    {t.status==='pending' ? (
-                      <div style={{display:'flex',gap:4}}>
-                        <button onClick={()=>approve(t.id)} style={{padding:'4px 8px',borderRadius:6,background:C.greenL,border:`1px solid ${C.green}44`,color:C.green,cursor:'pointer',fontSize:10,fontWeight:600}}>✓</button>
-                        <button onClick={()=>reject(t.id)}  style={{padding:'4px 8px',borderRadius:6,background:C.redL, border:`1px solid ${C.red}44`,  color:C.red,  cursor:'pointer',fontSize:10,fontWeight:600}}>✕</button>
-                      </div>
-                    ) : <div/>}
+                    <div><Badge type="gold">{t.category || t.cat}</Badge></div>
+                    <div>
+                      <Badge type={t.status==='approved'?'green':'blue'}>
+                        {t.status==='approved'?'✓ อนุมัติ':'⏳ รอตรวจ'}
+                      </Badge>
+                    </div>
+                    <div style={{display:'flex',gap:6, justifyContent:'flex-end'}}>
+                      {t.status==='pending' && (
+                        <button onClick={()=>approve(t.id)} style={{padding:'6px',borderRadius:8,background:C.greenL,border:`1px solid ${C.green}44`,color:C.green,cursor:'pointer'}} title="อนุมัติ"><Ic n="check" s={14}/></button>
+                      )}
+                      <button onClick={()=>removeTx(t.id)} style={{padding:'6px',borderRadius:8,background:C.redL, border:`1px solid ${C.red}44`,  color:C.red,  cursor:'pointer'}} title="ลบ"><Ic n="trash" s={14}/></button>
+                    </div>
                   </div>
                 ))}
-                {filtered.length===0&&<EmptyState icon="file" title="ไม่มีรายการ" sub="ลองเปลี่ยน filter ด้านบน"/>}
+                {filtered.length===0&&<EmptyState icon="file" title="ไม่พบข้อมูล" sub="กรุณาลองเปลี่ยนตัวกรอง หรือเพิ่มรายการใหม่"/>}
               </div>
             </div>
           )}
 
-          {/* ── Reports Tab ── */}
           {activeTab==='reports'&&(
-            <div style={{display:'flex',flexDirection:'column',gap:12}}>
-              <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:18}}>
-                <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:12}}>รายได้ vs ค่าใช้จ่าย (6 เดือน)</div>
-                <MiniChart data={[0]} color={C.gold} h={90}/>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:14}}>
-                  {([
-                    ['รายได้รวม',`฿${(income/1000).toFixed(0)}K`,C.green],
-                    ['ค่าใช้จ่าย',`฿${(expense/1000).toFixed(0)}K`,C.red],
-                    ['กำไรสุทธิ',`฿${((income-expense)/1000).toFixed(0)}K`,C.gold],
-                    ['ROI',`${Math.round((income-expense)/income*100)}%`,C.blue],
-                  ] as [string,string,string][]).map(([l,v,col])=>(
-                    <div key={l} style={{background:C.bg3,borderRadius:10,padding:'12px 14px'}}>
-                      <div style={{fontSize:11,color:C.text3}}>{l}</div>
-                      <div style={{fontSize:18,fontWeight:800,color:col,marginTop:2}}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                {['PDF Report','Excel Export','Send to Accountant'].map(a=>(
-                  <button key={a} onClick={()=>showToast(`${a} สำเร็จ`)} style={{flex:1,padding:'10px 14px',borderRadius:10,background:C.surface,border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:12,fontWeight:500,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                    <Ic n="download" s={13}/>{a}
-                  </button>
-                ))}
-              </div>
-            </div>
+             <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:24}}>
+                <EmptyState icon="trending" title="AI Financial Insights" sub="ระบบกำลังวิเคราะห์ข้อมูลการเงินย้อนหลัง เพื่อทำนายกระแสเงินสดในอนาคต"/>
+             </div>
           )}
         </div>
 
-        {/* Sidebar */}
-        <div style={{width:220,display:'flex',flexDirection:'column',gap:12,flexShrink:0}}>
-          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:16}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:12}}>ค่าใช้จ่ายตามหมวด</div>
-            {([['ค่าใช้จ่ายทั่วไป',35,C.gold],['Marketing',28,C.blue],['IT',20,C.purple],['อื่นๆ',17,C.text3]] as [string,number,string][]).map(([l,p,col])=>(
-              <div key={l} style={{marginBottom:10}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                  <span style={{fontSize:11,color:C.text2}}>{l}</span>
-                  <span style={{fontSize:11,fontWeight:700,color:col}}>{p}%</span>
+        <div style={{width:240,display:'flex',flexDirection:'column',gap:16,flexShrink:0}}>
+           <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:16}}>
+              <div style={{fontSize:13, fontWeight:800, color:C.text, marginBottom:16}}>ยอดใช้จ่ายตามหมวด</div>
+              {[
+                {l:'ค่าใช้จ่ายทั่วไป', p:45, col:C.gold},
+                {l:'Marketing', p:25, col:C.blue},
+                {l:'IT & อุปกรณ์', p:20, col:C.purple},
+                {l:'อื่นๆ', p:10, col:C.text3}
+              ].map(i => (
+                <div key={i.l} style={{marginBottom:14}}>
+                  <div style={{display:'flex', justifyContent:'space-between', fontSize:11, marginBottom:4}}>
+                    <span style={{color:C.text2}}>{i.l}</span>
+                    <span style={{fontWeight:700, color:i.col}}>{i.p}%</span>
+                  </div>
+                  <ProgressBar pct={i.p} color={i.col} height={5}/>
                 </div>
-                <ProgressBar pct={p} color={col}/>
+              ))}
+           </div>
+
+           <div style={{background:`${C.gold}10`, border:`1px solid ${C.gold}30`, borderRadius:16, padding:16}}>
+              <div style={{display:'flex', alignItems:'center', gap:8, marginBottom:10}}>
+                <Ic n="zap" s={16} c={C.gold}/>
+                <span style={{fontSize:13, fontWeight:800, color:C.gold}}>AI Insights</span>
               </div>
-            ))}
-          </div>
-
-          <div style={{background:`${C.gold}10`,border:`1px solid ${C.gold}30`,borderRadius:14,padding:14}}>
-            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
-              <Ic n="zap" s={13} c={C.gold}/>
-              <span style={{fontSize:12,fontWeight:700,color:C.gold}}>AI แนะนำ</span>
-            </div>
-            <p style={{fontSize:11,color:C.text2,lineHeight:1.7}}>ระบบกำลังเรียนรู้ข้อมูลของคุณเพื่อนำเสนอคำแนะนำ</p>
-          </div>
-
-          {pending>0&&(
-            <div style={{background:C.blueL,border:`1px solid ${C.blue}44`,borderRadius:14,padding:14}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.blue,marginBottom:4}}>⏳ รอ Approve</div>
-              <div style={{fontSize:22,fontWeight:800,color:C.blue}}>{pending}</div>
-              <div style={{fontSize:11,color:C.text3}}>รายการรอการอนุมัติ</div>
-              <button onClick={()=>setActiveTab('transactions')}
-                style={{marginTop:8,width:'100%',padding:'6px',borderRadius:8,background:C.blueL,border:`1px solid ${C.blue}44`,color:C.blue,cursor:'pointer',fontSize:11,fontWeight:600}}>
-                ดูทั้งหมด →
-              </button>
-            </div>
-          )}
+              <p style={{fontSize:12, color:C.text2, lineHeight:1.6}}>Gemini สังเกตเห็นว่ายอดใช้จ่ายด้าน IT ของคุณสูงขึ้น 15% ในเดือนนี้ ควรตรวจสอบความจำเป็นของ Subscription ที่ไม่ได้ใช้งาน</p>
+           </div>
         </div>
       </div>
 
-      {/* Add Transaction Modal */}
       {showAdd&&(
-        <Modal title="เพิ่มรายการใหม่" onClose={()=>setShowAdd(false)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Field label="ประเภท">
+        <Modal title="เพิ่มรายการเงินสด" onClose={()=>setShowAdd(false)}>
+          <div style={{display:'flex',flexDirection:'column',gap:14}}>
+            <Field label="ประเภทรายการ">
               <div style={{display:'flex',gap:8}}>
-                {(['expense','income'] as string[]).map(t=>(
+                {['expense','income'].map(t=>(
                   <button key={t} onClick={()=>setAddForm({...addForm,type:t})}
-                    style={{flex:1,padding:'10px',borderRadius:10,background:addForm.type===t?t==='expense'?C.redL:C.greenL:'rgba(255,255,255,0.04)',border:`1px solid ${addForm.type===t?t==='expense'?C.red:C.green:C.border}`,color:addForm.type===t?t==='expense'?C.red:C.green:C.text3,cursor:'pointer',fontSize:12,fontWeight:600}}>
+                    style={{flex:1,padding:'12px',borderRadius:12,background:addForm.type===t?t==='expense'?C.redL:C.greenL:'rgba(255,255,255,0.04)',border:`1px solid ${addForm.type===t?t==='expense'?C.red:C.green:C.border}`,color:addForm.type===t?t==='expense'?C.red:C.green:C.text3,cursor:'pointer',fontSize:13,fontWeight:700}}>
                     {t==='expense'?'💸 รายจ่าย':'💰 รายได้'}
                   </button>
                 ))}
               </div>
             </Field>
-            <Field label="รายการ" required>
-              <Input placeholder="ค่าใช้จ่าย..." value={addForm.desc} onChange={e=>setAddForm({...addForm,desc:e.target.value})}/>
+            <Field label="ชื่อรายการ" required>
+              <Input placeholder="เช่น ค่าเช่าออฟฟิศ, ค่าโปรเจค..." value={addForm.desc} onChange={e=>setAddForm({...addForm,desc:e.target.value})}/>
             </Field>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
               <Field label="จำนวนเงิน (฿)" required>
-                <Input type="number" placeholder="0" value={addForm.amount} onChange={e=>setAddForm({...addForm,amount:e.target.value})}/>
+                <Input type="number" placeholder="0.00" value={addForm.amount} onChange={e=>setAddForm({...addForm,amount:e.target.value})}/>
               </Field>
               <Field label="วันที่">
                 <Input type="date" value={addForm.date} onChange={e=>setAddForm({...addForm,date:e.target.value})}/>
@@ -328,9 +348,9 @@ export default function FinancePage() {
             <Field label="หมวดหมู่">
               <Select value={addForm.cat} onChange={e=>setAddForm({...addForm,cat:e.target.value})} options={['ค่าใช้จ่าย','Marketing','IT & อุปกรณ์','ทรัพย์สิน','รายได้','อื่นๆ']}/>
             </Field>
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end',paddingTop:8,borderTop:`1px solid ${C.border}`}}>
-              <button onClick={()=>setShowAdd(false)} style={{padding:'10px 20px',borderRadius:10,background:'rgba(255,255,255,0.05)',border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:13,fontWeight:600}}>ยกเลิก</button>
-              <button onClick={addTx} style={{padding:'10px 20px',borderRadius:10,background:`linear-gradient(135deg,${C.gold},${C.gold2})`,border:'none',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>เพิ่มรายการ</button>
+            <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:10}}>
+              <button onClick={()=>setShowAdd(false)} style={{padding:'10px 24px',borderRadius:10,background:'transparent',border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:13,fontWeight:600}}>ยกเลิก</button>
+              <button onClick={addTx} style={{padding:'10px 24px',borderRadius:10,background:C.gold,border:'none',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>บันทึกรายการ</button>
             </div>
           </div>
         </Modal>

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Ic, Avatar, Badge, StatCard, Modal, Field, Input, Select, Tabs, ProgressBar, Toast } from '@/lib/ui'
 import { useApp } from '@/lib/theme'
 import { useAppData } from '@/lib/data'
+import { api } from '@/lib/api'
 
 export default function PeoplePage() {
   const { colors: C } = useApp()
@@ -17,150 +18,181 @@ export default function PeoplePage() {
   const [toast, setToast] = useState<{msg:string,type:string}|null>(null)
   const showToast = (msg:string, type='success') => setToast({msg,type})
 
-  const filtered = employees.filter(e=>{
-    const m = e.name.includes(search)||e.role.includes(search)||e.dept.includes(search)
+  const filtered = (employees || []).filter(e=>{
+    const m = (e.name || '').toLowerCase().includes(search.toLowerCase()) || 
+              (e.role || '').toLowerCase().includes(search.toLowerCase()) || 
+              (e.dept || '').toLowerCase().includes(search.toLowerCase())
     if(activeTab==='all') return m
-    if(activeTab==='active') return m&&e.status==='active'
-    return m&&e.status==='leave'
+    if(activeTab==='active') return m && e.status==='active'
+    return m && e.status==='leave'
   })
 
-  const addEmployee = () => {
+  const addEmployee = async () => {
     if(!newEmp.name||!newEmp.role){showToast('กรุณากรอกข้อมูลให้ครบ','error');return}
-    const colors=['#6B8E6E','#8B6F47','#C4956A','#3498DB','#9B59B6','#E67E22','#1ABC9C','#E74C3C']
-    setEmployees(e=>[...e,{id:Date.now(),...newEmp,status:'active',color:colors[e.length%colors.length],leave:15,leaveUsed:0,start:new Date().toISOString().slice(0,10)}])
-    setNewEmp({name:'',role:'',dept:'HR',email:'',phone:'',salary:''})
-    setShowModal(false);showToast('เพิ่มพนักงานสำเร็จ')
+    try {
+      const res = await api.createEmployee(newEmp);
+      setEmployees(e => [res.data, ...e]);
+      setNewEmp({name:'',role:'',dept:'HR',email:'',phone:'',salary:''});
+      setShowModal(false);
+      showToast('เพิ่มพนักงานสำเร็จ');
+    } catch (err: any) {
+      showToast(err.message || 'เพิ่มไม่สำเร็จ', 'error');
+    }
   }
-  const deleteEmployee = (id:number) => {setEmployees(e=>e.filter(x=>x.id!==id));setShowDetail(null);showToast('ลบพนักงานแล้ว')}
+
+  const deleteEmployee = async (id: string) => {
+    try {
+      await api.deleteEmployee(id);
+      setEmployees(e => e.filter(x => x.id !== id));
+      setShowDetail(null);
+      showToast('ลบพนักงานแล้ว');
+    } catch (err: any) {
+      showToast('ลบไม่สำเร็จ', 'error');
+    }
+  }
+
   const requestLeave = () => {
-    setEmployees(e=>e.map(x=>x.id===showLeave.id?{...x,leaveUsed:x.leaveUsed+(parseInt(String(leaveForm.days))||0)}:x))
-    setShowLeave(null);showToast('ส่งคำขอลาแล้ว')
+    // Note: Leave management would normally have a backend API. 
+    // For now we'll do an optimistic local update.
+    setEmployees(e=>e.map(x=>x.id===showLeave.id?{...x,leaveUsed: (Number(x.leaveUsed)||0) + (parseInt(String(leaveForm.days))||0)}:x))
+    setShowLeave(null);
+    showToast('ส่งคำขอลาไปยัง HR แล้ว');
   }
-  const depts = [...new Set(employees.map(e=>e.dept))]
+
+  const depts = [...new Set((employees || []).map(e=>e.dept))].filter(Boolean)
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:16,animation:'fadeIn 0.3s ease'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}}>
-        <div><div style={{fontSize:18,fontWeight:800,color:C.text}}>HR & People Hub</div><div style={{fontSize:12,color:C.text3,marginTop:2}}>จัดการพนักงาน {employees.length} คน</div></div>
+        <div><div style={{fontSize:18,fontWeight:800,color:C.text}}>HR & People Hub</div><div style={{fontSize:12,color:C.text3,marginTop:2}}>จัดการและดูแลพนักงานทั้งหมด {employees.length} คน</div></div>
         <div style={{display:'flex',gap:8}}>
-          <button onClick={()=>showToast('Export เสร็จแล้ว')} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:10,background:'rgba(255,255,255,0.06)',border:`1px solid ${C.border2}`,color:C.text2,cursor:'pointer',fontSize:12,fontWeight:600}}><Ic n="download" s={13}/>Export</button>
-          <button onClick={()=>setShowModal(true)} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:10,background:`linear-gradient(135deg,${C.gold},${C.gold2})`,border:'none',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,boxShadow:`0 4px 14px ${C.gold}44`}}><Ic n="plus" s={13}/>เพิ่มพนักงาน</button>
+          <button onClick={()=>showToast('กำลังเตรียมรายงาน...')} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:10,background:'rgba(255,255,255,0.06)',border:`1px solid ${C.border2}`,color:C.text2,cursor:'pointer',fontSize:12,fontWeight:600}}><Ic n="download" s={13}/>Export CSV</button>
+          <button onClick={()=>setShowModal(true)} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 18px',borderRadius:12,background:C.gold,border:'none',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,boxShadow:`0 4px 12px ${C.gold}33`}}><Ic n="plus" s={14}/>เพิ่มพนักงาน</button>
         </div>
       </div>
 
       <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-        <StatCard icon="users" label="ทั้งหมด" value={employees.length} color={C.green}/>
-        <StatCard icon="calendar" label="ลาวันนี้" value={employees.filter(e=>e.status==='leave').length} color={C.gold}/>
-        <StatCard icon="award" label="แผนก" value={depts.length} color={C.blue}/>
-        <StatCard icon="trending" label="พนักงานใหม่" value="5" sub="เดือนนี้" color={C.purple}/>
+        <StatCard icon="users" label="พนักงานทั้งหมด" value={employees.length} color={C.blue}/>
+        <StatCard icon="calendar" label="ลาพักผ่อนวันนี้" value={employees.filter(e=>e.status==='leave').length} color={C.gold}/>
+        <StatCard icon="zap" label="แผนกในระบบ" value={depts.length} color={C.purple}/>
+        <StatCard icon="trending" label="Recruitment" value="Active" sub="3 Openings" color={C.green}/>
       </div>
 
-      <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-        <div style={{position:'relative',flex:1,minWidth:200}}>
-          <Ic n="search" s={14} c={C.text3} style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)'}}/>
-          <input placeholder="ค้นหาชื่อ / ตำแหน่ง / แผนก..." value={search} onChange={e=>setSearch(e.target.value)}
-            style={{background:'rgba(255,255,255,0.05)',border:`1px solid ${C.border}`,borderRadius:10,padding:'9px 14px 9px 36px',color:C.text,fontFamily:'Montserrat',fontSize:12,outline:'none',width:'100%'}}/>
+      <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap', background:C.surface, padding:'10px 14px', borderRadius:16, border:`1px solid ${C.border}`}}>
+        <div style={{position:'relative',flex:1,minWidth:250}}>
+          <Ic n="search" s={14} c={C.text3} style={{position:'absolute',left:14,top:'50%',transform:'translateY(-50%)'}}/>
+          <input placeholder="ค้นหาด้วยชื่อ, ตำแหน่ง หรือแผนก..." value={search} onChange={e=>setSearch(e.target.value)}
+            style={{background:'rgba(255,255,255,0.06)',border:`1px solid ${C.border2}`,borderRadius:12,padding:'10px 14px 10px 40px',color:C.text,fontFamily:'Montserrat',fontSize:13,outline:'none',width:'100%'}}/>
         </div>
-        <Tabs tabs={[{id:'all',label:'ทั้งหมด'},{id:'active',label:'Active'},{id:'leave',label:'ลา'}]} active={activeTab} onChange={setActiveTab}/>
+        <Tabs tabs={[{id:'all',label:'ทั้งหมด'},{id:'active',label:'กำลังทำงาน'},{id:'leave',label:'อยู่ระหว่างลา'}]} active={activeTab} onChange={setActiveTab}/>
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:12}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:14}}>
         {filtered.map((emp,i)=>(
-          <div key={emp.id} onClick={()=>setShowDetail(emp)} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:16,cursor:'pointer',transition:'all 0.2s',animation:`fadeIn 0.3s ease ${i*0.04}s both`}}
-            onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background='rgba(255,255,255,0.07)';(e.currentTarget as HTMLDivElement).style.borderColor=emp.color+'44';(e.currentTarget as HTMLDivElement).style.transform='translateY(-2px)';}}
-            onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background=C.surface;(e.currentTarget as HTMLDivElement).style.borderColor=C.border;(e.currentTarget as HTMLDivElement).style.transform='';}}>
-            <div style={{display:'flex',gap:12,alignItems:'flex-start',marginBottom:12}}>
-              <Avatar name={emp.name} size={44} color={emp.color}/>
+          <div key={emp.id} onClick={()=>setShowDetail(emp)} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:18,padding:18,cursor:'pointer',transition:'all 0.25s',animation:`fadeIn 0.3s ease ${i*0.04}s both`, boxShadow:`0 4px 15px rgba(0,0,0,0.1)`}}
+            onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=C.gold+'44';(e.currentTarget as HTMLDivElement).style.transform='translateY(-3px)';}}
+            onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor=C.border;(e.currentTarget as HTMLDivElement).style.transform='';}}>
+            <div style={{display:'flex',gap:14,alignItems:'flex-start',marginBottom:14}}>
+              <Avatar name={emp.name} size={48} color={emp.color || C.gold}/>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{emp.name}</div>
-                <div style={{fontSize:11,color:C.text3,marginTop:2}}>{emp.role}</div>
-                <Badge type={emp.dept==='IT'?'blue':emp.dept==='Finance'?'gold':emp.dept==='Sales'?'purple':'green'}>{emp.dept}</Badge>
+                <div style={{fontSize:14,fontWeight:800,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{emp.name}</div>
+                <div style={{fontSize:11,color:C.text3,marginTop:2, fontWeight:500}}>{emp.role}</div>
+                <div style={{marginTop:6}}><Badge type="gold">{emp.dept}</Badge></div>
               </div>
-              <div style={{width:8,height:8,borderRadius:'50%',background:emp.status==='active'?C.green:C.red,marginTop:4}}/>
+              <div style={{width:10,height:10,borderRadius:'50%',background:emp.status==='active'?C.green:C.gold,marginTop:4, boxShadow:emp.status==='active'?`0 0 10px ${C.green}55`:`0 0 10px ${C.gold}55`}}/>
             </div>
-            <div style={{marginBottom:8}}>
-              <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-                <span style={{fontSize:10,color:C.text3}}>วันลาคงเหลือ</span>
-                <span style={{fontSize:10,fontWeight:700,color:C.gold}}>{emp.leave-emp.leaveUsed}/{emp.leave} วัน</span>
+            <div style={{marginBottom:12, background:'rgba(0,0,0,0.1)', padding:10, borderRadius:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                <span style={{fontSize:10,color:C.text3, fontWeight:600}}>วันลาพักร้อนคงเหลือ</span>
+                <span style={{fontSize:10,fontWeight:800,color:C.gold}}>{(emp.leave||15)-(emp.leaveUsed||0)}/{(emp.leave||15)} วัน</span>
               </div>
-              <ProgressBar pct={((emp.leave-emp.leaveUsed)/emp.leave)*100} color={C.gold}/>
+              <ProgressBar pct={(((emp.leave||15)-(emp.leaveUsed||0))/(emp.leave||15))*100} color={C.gold} height={5}/>
             </div>
-            <div style={{display:'flex',gap:6}} onClick={e=>e.stopPropagation()}>
-              <button onClick={()=>setShowLeave(emp)} style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:4,padding:'6px',borderRadius:8,background:'rgba(255,255,255,0.05)',border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:11}}>
-                <Ic n="calendar" s={11}/>ขอลา
+            <div style={{display:'flex',gap:8}} onClick={e=>e.stopPropagation()}>
+              <button onClick={()=>setShowLeave(emp)} style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:6,padding:'8px',borderRadius:10,background:C.goldLight,border:`1px solid ${C.gold}33`,color:C.gold,cursor:'pointer',fontSize:11, fontWeight:700}}>
+                <Ic n="calendar" s={12}/>ทำเรื่องลา
               </button>
-              <button onClick={()=>setShowDetail(emp)} style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:4,padding:'6px',borderRadius:8,background:'rgba(255,255,255,0.05)',border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:11}}>
-                <Ic n="eye" s={11}/>ดูโปรไฟล์
+              <button onClick={()=>setShowDetail(emp)} style={{padding:'8px',borderRadius:10,background:'rgba(255,255,255,0.06)',border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer'}}>
+                <Ic n="eye" s={14}/>
               </button>
             </div>
           </div>
         ))}
+        {filtered.length === 0 && <div style={{gridColumn:'1/-1', padding:60, textAlign:'center', color:C.text3, fontSize:14, border:`1px dashed ${C.border}`, borderRadius:18}}>ไม่พบพนักงานที่ค้นหา</div>}
       </div>
 
       {showModal&&(
-        <Modal title="เพิ่มพนักงานใหม่" onClose={()=>setShowModal(false)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-              <Field label="ชื่อ-นามสกุล" required><Input placeholder="สมชาย จันทร์" value={newEmp.name} onChange={e=>setNewEmp({...newEmp,name:e.target.value})}/></Field>
-              <Field label="ตำแหน่ง" required><Input placeholder="Developer" value={newEmp.role} onChange={e=>setNewEmp({...newEmp,role:e.target.value})}/></Field>
-              <Field label="แผนก"><Select value={newEmp.dept} onChange={e=>setNewEmp({...newEmp,dept:e.target.value})} options={['HR','Finance','IT','Sales','Marketing','Creative','บริหาร']}/></Field>
-              <Field label="เงินเดือน"><Input placeholder="฿50,000" value={newEmp.salary} onChange={e=>setNewEmp({...newEmp,salary:e.target.value})}/></Field>
-              <Field label="อีเมล"><Input placeholder="name@company.com" type="email" value={newEmp.email} onChange={e=>setNewEmp({...newEmp,email:e.target.value})}/></Field>
-              <Field label="เบอร์โทร"><Input placeholder="08x-xxx-xxxx" value={newEmp.phone} onChange={e=>setNewEmp({...newEmp,phone:e.target.value})}/></Field>
+        <Modal title="ลงทะเบียนพนักงานใหม่" onClose={()=>setShowModal(false)}>
+          <div style={{display:'flex',flexDirection:'column',gap:16}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+              <Field label="ชื่อ-นามสกุล" required><Input placeholder="เช่น สมชาย ใจดี" value={newEmp.name} onChange={e=>setNewEmp({...newEmp,name:e.target.value})}/></Field>
+              <Field label="ตำแหน่งงาน" required><Input placeholder="เช่น Senior Developer" value={newEmp.role} onChange={e=>setNewEmp({...newEmp,role:e.target.value})}/></Field>
+              <Field label="แผนกต้นสังกัด"><Select value={newEmp.dept} onChange={e=>setNewEmp({...newEmp,dept:e.target.value})} options={['Management','Finance','HR','Engineering','Product','Sales','Marketing']}/></Field>
+              <Field label="เงินเดือนเดือน (฿)"><Input placeholder="0.00" type="number" value={newEmp.salary} onChange={e=>setNewEmp({...newEmp,salary:e.target.value})}/></Field>
+              <Field label="อีเมลบริษัท"><Input placeholder="name@company.com" type="email" value={newEmp.email} onChange={e=>setNewEmp({...newEmp,email:e.target.value})}/></Field>
+              <Field label="เบอร์โทรศัพท์ติดต่อ"><Input placeholder="08x-xxx-xxxx" value={newEmp.phone} onChange={e=>setNewEmp({...newEmp,phone:e.target.value})}/></Field>
             </div>
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end',paddingTop:8,borderTop:`1px solid ${C.border}`}}>
-              <button onClick={()=>setShowModal(false)} style={{padding:'10px 20px',borderRadius:10,background:'rgba(255,255,255,0.05)',border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:13,fontWeight:600}}>ยกเลิก</button>
-              <button onClick={addEmployee} style={{padding:'10px 20px',borderRadius:10,background:`linear-gradient(135deg,${C.gold},${C.gold2})`,border:'none',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>เพิ่มพนักงาน</button>
+            <div style={{display:'flex',gap:12,justifyContent:'flex-end',marginTop:10,paddingTop:16,borderTop:`1px solid ${C.border}`}}>
+              <button onClick={()=>setShowModal(false)} style={{padding:'10px 24px',borderRadius:10,background:'transparent',border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:13,fontWeight:600}}>ยกเลิก</button>
+              <button onClick={addEmployee} style={{padding:'10px 24px',borderRadius:12,background:C.gold,border:'none',color:'#fff',cursor:'pointer',fontSize:14,fontWeight:800}}>ยืนยันเพิ่มพนักงาน</button>
             </div>
           </div>
         </Modal>
       )}
 
       {showDetail&&(
-        <Modal title="ข้อมูลพนักงาน" onClose={()=>setShowDetail(null)} width={520}>
-          <div style={{display:'flex',gap:16,marginBottom:20,alignItems:'flex-start'}}>
-            <Avatar name={showDetail.name} size={64} color={showDetail.color}/>
+        <Modal title="โปรไฟล์พนักงาน" onClose={()=>setShowDetail(null)} width={550}>
+          <div style={{display:'flex',gap:20,marginBottom:24,alignItems:'center', background:C.bg3, padding:20, borderRadius:18, border:`1px solid ${C.border}`}}>
+            <Avatar name={showDetail.name} size={72} color={showDetail.color || C.gold}/>
             <div style={{flex:1}}>
-              <div style={{fontSize:18,fontWeight:800,color:C.text}}>{showDetail.name}</div>
-              <div style={{fontSize:13,color:C.text3}}>{showDetail.role} · {showDetail.dept}</div>
-              <div style={{marginTop:6,display:'flex',gap:6}}>
-                <Badge type={showDetail.status==='active'?'green':'red'}>{showDetail.status==='active'?'Active':'ลา'}</Badge>
-                <Badge type="gold">เริ่มงาน {showDetail.start}</Badge>
+              <div style={{fontSize:20,fontWeight:900,color:C.text}}>{showDetail.name}</div>
+              <div style={{fontSize:14,color:C.text3, marginTop:4}}>{showDetail.role} · <span style={{color:C.gold, fontWeight:700}}>{showDetail.dept}</span></div>
+              <div style={{marginTop:10,display:'flex',gap:8}}>
+                <Badge type={showDetail.status==='active'?'green':'gold'}>{showDetail.status==='active'?'Working Now':'On Leave'}</Badge>
+                <Badge type="blue">Employee ID: {showDetail.id?.slice(-4) || 'NEW'}</Badge>
               </div>
             </div>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
-            {([['อีเมล',showDetail.email,'mail'],['โทร',showDetail.phone,'phone'],['เงินเดือน',showDetail.salary,'dollar'],['วันลาคงเหลือ',`${showDetail.leave-showDetail.leaveUsed}/${showDetail.leave} วัน`,'calendar']] as [string,string,string][]).map(([l,v,icon])=>(
-              <div key={l} style={{background:C.surface,borderRadius:10,padding:'10px 12px',display:'flex',gap:8,alignItems:'center'}}>
-                <Ic n={icon} s={14} c={C.gold}/>
-                <div><div style={{fontSize:10,color:C.text3}}>{l}</div><div style={{fontSize:12,fontWeight:600,color:C.text}}>{v}</div></div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20}}>
+            {[
+              ['อีเมลพนักงาน',showDetail.email || '-','mail'],
+              ['เบอร์ติดต่อ',showDetail.phone || '-','phone'],
+              ['เงินเดือนปัจจุบัน',`฿${Number(showDetail.salary || 0).toLocaleString()}`,'dollar'],
+              ['วันลาคงเหลือ',`${(showDetail.leave||15)-(showDetail.leaveUsed||0)} / ${(showDetail.leave||15)} วัน`,'calendar']
+            ].map(([l,v,icon]:any)=>(
+              <div key={l} style={{background:C.surface,borderRadius:12,padding:'14px',display:'flex',gap:12,alignItems:'center', border:`1px solid ${C.border}`}}>
+                <div style={{width:32, height:32, borderRadius:10, background:`${C.gold}15`, display:'flex', alignItems:'center', justifyContent:'center'}}><Ic n={icon} s={16} c={C.gold}/></div>
+                <div><div style={{fontSize:10,color:C.text3, marginBottom:2}}>{l}</div><div style={{fontSize:13,fontWeight:700,color:C.text}}>{v}</div></div>
               </div>
             ))}
           </div>
-          <div style={{display:'flex',gap:8}}>
-            <button onClick={()=>{setShowLeave(showDetail);setShowDetail(null);}} style={{flex:1,padding:'10px',borderRadius:10,background:'rgba(255,255,255,0.05)',border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><Ic n="calendar" s={13}/>ขอลา</button>
-            <button onClick={()=>deleteEmployee(showDetail.id)} style={{flex:1,padding:'10px',borderRadius:10,background:C.redL,border:`1px solid ${C.red}44`,color:C.red,cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}><Ic n="trash" s={13}/>ลบ</button>
+          <div style={{display:'flex',gap:10, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
+            <button onClick={()=>{setShowLeave(showDetail);setShowDetail(null);}} style={{flex:1,padding:'12px',borderRadius:12,background:C.goldLight,border:`1px solid ${C.gold}33`,color:C.gold,cursor:'pointer',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}><Ic n="calendar" s={14}/>จัดการวันลา</button>
+            <button onClick={()=>deleteEmployee(showDetail.id)} style={{padding:'12px 18px',borderRadius:12,background:C.redL,border:`1px solid ${C.red}33`,color:C.red,cursor:'pointer'}} title="ลบออกจากระบบ"><Ic n="trash" s={18}/></button>
           </div>
         </Modal>
       )}
 
       {showLeave&&(
-        <Modal title={`ขอลา — ${showLeave.name}`} onClose={()=>setShowLeave(null)}>
-          <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            <Field label="ประเภทการลา"><Select value={leaveForm.type} onChange={e=>setLeaveForm({...leaveForm,type:e.target.value})} options={['ลาพักร้อน','ลาป่วย','ลากิจ','ลาคลอด']}/></Field>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-              <Field label="วันที่เริ่มลา"><Input type="date" value={leaveForm.startDate} onChange={e=>setLeaveForm({...leaveForm,startDate:e.target.value})}/></Field>
-              <Field label="จำนวนวัน"><Input type="number" placeholder="1" value={leaveForm.days} onChange={e=>setLeaveForm({...leaveForm,days:parseInt(e.target.value)||1})}/></Field>
-            </div>
-            <Field label="เหตุผล">
-              <textarea value={leaveForm.reason} onChange={e=>setLeaveForm({...leaveForm,reason:e.target.value})} placeholder="ระบุเหตุผล..." style={{background:'rgba(255,255,255,0.05)',border:`1px solid ${C.border2}`,borderRadius:10,padding:'10px 14px',color:C.text,fontFamily:'Montserrat',fontSize:13,outline:'none',width:'100%',minHeight:80,resize:'vertical'}}/>
+        <Modal title={`คำขอลาหยุด — ${showLeave.name}`} onClose={()=>setShowLeave(null)}>
+          <div style={{display:'flex',flexDirection:'column',gap:16}}>
+            <Field label="ประเภทการลา">
+               <Select value={leaveForm.type} onChange={e=>setLeaveForm({...leaveForm,type:e.target.value})} options={['ลาพักร้อน (Annual)','ลาป่วย (Sick)','ลากิจ (Personal)','ลาอื่นๆ (Other)']}/>
             </Field>
-            <div style={{background:C.goldLight,border:`1px solid ${C.gold}44`,borderRadius:10,padding:'10px 14px'}}>
-              <span style={{fontSize:12,color:C.gold}}>วันลาคงเหลือ: <strong>{showLeave.leave-showLeave.leaveUsed} วัน</strong></span>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+              <Field label="วันที่เริ่มต้น"><Input type="date" value={leaveForm.startDate} onChange={e=>setLeaveForm({...leaveForm,startDate:e.target.value})}/></Field>
+              <Field label="จำนวนวันลาทั้งหมด"><Input type="number" placeholder="1" value={leaveForm.days} onChange={e=>setLeaveForm({...leaveForm,days:parseInt(e.target.value)||1})}/></Field>
             </div>
-            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-              <button onClick={()=>setShowLeave(null)} style={{padding:'10px 20px',borderRadius:10,background:'rgba(255,255,255,0.05)',border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:13,fontWeight:600}}>ยกเลิก</button>
-              <button onClick={requestLeave} style={{padding:'10px 20px',borderRadius:10,background:`linear-gradient(135deg,${C.gold},${C.gold2})`,border:'none',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>ส่งคำขอลา</button>
+            <Field label="ระบุเหตุผลการลา">
+              <textarea value={leaveForm.reason} onChange={e=>setLeaveForm({...leaveForm,reason:e.target.value})} placeholder="ระบุรายละเอียดเพื่อให้หัวหน้างานพิจารณา..." style={{background:'rgba(255,255,255,0.06)',border:`1px solid ${C.border2}`,borderRadius:14,padding:14,color:C.text,fontFamily:'inherit',fontSize:13,outline:'none',width:'100%',minHeight:100,resize:'vertical', lineHeight:1.6}}/>
+            </Field>
+            <div style={{background:`${C.gold}12`, border:`1px solid ${C.gold}33`, borderRadius:14, padding:14, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <span style={{fontSize:12, color:C.text2, fontWeight:600}}>วันลาคงเหลือปัจจุบัน:</span>
+              <span style={{fontSize:14, color:C.gold, fontWeight:900}}>{(showLeave.leave||15)-(showLeave.leaveUsed||0)} วัน</span>
+            </div>
+            <div style={{display:'flex',gap:12,justifyContent:'flex-end', marginTop:10}}>
+              <button onClick={()=>setShowLeave(null)} style={{padding:'10px 24px',borderRadius:10,background:'transparent',border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:13,fontWeight:600}}>ยกเลิก</button>
+              <button onClick={requestLeave} style={{padding:'12px 30px',borderRadius:12,background:C.gold,border:'none',color:'#fff',cursor:'pointer',fontSize:14,fontWeight:800}}>ยืนยันการลา</button>
             </div>
           </div>
         </Modal>

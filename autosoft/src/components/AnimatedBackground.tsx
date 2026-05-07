@@ -21,10 +21,10 @@ export default function AnimatedBackground() {
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: -1, overflow: 'hidden', background: colors.bg }}>
-      <iframe 
-        src="https://www.youtube.com/embed/U0v1r9fkNwY?autoplay=1&loop=1&mute=1&controls=0&playlist=U0v1r9fkNwY&showinfo=0&modestbranding=1&disablekb=1&rel=0" 
-        style={{ position: 'absolute', top: '50%', left: '50%', width: '100vw', height: '56.25vw', minHeight: '100vh', minWidth: '177.77vh', transform: 'translate(-50%, -50%)', border: 'none', pointerEvents: 'none', zIndex: -3 }} 
-        allow="autoplay; encrypted-media" 
+      <video 
+        autoPlay loop muted playsInline 
+        src="https://cdn.pixabay.com/video/2021/08/11/84700-587870341_large.mp4" 
+        style={{ position: 'absolute', top: '50%', left: '50%', width: '100vw', height: '100vh', objectFit: 'cover', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: -3 }} 
       />
       <div style={{ position: 'absolute', inset: 0, background: isLight ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.6)', zIndex: -2 }} />
       <div style={{ position: 'absolute', inset: 0, background: isLight ? 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.9))' : 'linear-gradient(to bottom, transparent, rgba(10,7,5,0.9))', opacity: 0.8, zIndex: -1 }} />
