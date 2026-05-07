@@ -51,12 +51,28 @@ export default function PeoplePage() {
     }
   }
 
+  const [showReview, setShowReview] = useState<any>(null)
+  const [reviewing, setReviewing] = useState(false)
+
   const requestLeave = () => {
     // Note: Leave management would normally have a backend API. 
     // For now we'll do an optimistic local update.
     setEmployees(e=>e.map(x=>x.id===showLeave.id?{...x,leaveUsed: (Number(x.leaveUsed)||0) + (parseInt(String(leaveForm.days))||0)}:x))
     setShowLeave(null);
     showToast('ส่งคำขอลาไปยัง HR แล้ว');
+  }
+
+  const runPerformanceReview = async (id: string) => {
+    setReviewing(true)
+    try {
+      const res = await api.reviewEmployee(id)
+      setShowReview({ ...res.data, empId: id })
+      setShowDetail(null)
+    } catch (err: any) {
+      showToast('AI ประเมินผลล้มเหลว', 'error')
+    } finally {
+      setReviewing(false)
+    }
   }
 
   const depts = [...new Set((employees || []).map(e=>e.dept))].filter(Boolean)
@@ -167,6 +183,10 @@ export default function PeoplePage() {
             ))}
           </div>
           <div style={{display:'flex',gap:10, paddingTop:16, borderTop:`1px solid ${C.border}`}}>
+            <button onClick={()=>runPerformanceReview(showDetail.id)} disabled={reviewing} style={{flex:2,padding:'12px',borderRadius:12,background:C.purpleL,border:`1px solid ${C.purple}33`,color:C.purple,cursor:'pointer',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+              {reviewing ? <div style={{animation:'spin 1s linear infinite'}}><Ic n="cpu" s={14}/></div> : <Ic n="zap" s={14}/>}
+              {reviewing ? 'AI กำลังวิเคราะห์...' : 'ประเมินผลด้วย Gemini AI'}
+            </button>
             <button onClick={()=>{setShowLeave(showDetail);setShowDetail(null);}} style={{flex:1,padding:'12px',borderRadius:12,background:C.goldLight,border:`1px solid ${C.gold}33`,color:C.gold,cursor:'pointer',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}><Ic n="calendar" s={14}/>จัดการวันลา</button>
             <button onClick={()=>deleteEmployee(showDetail.id)} style={{padding:'12px 18px',borderRadius:12,background:C.redL,border:`1px solid ${C.red}33`,color:C.red,cursor:'pointer'}} title="ลบออกจากระบบ"><Ic n="trash" s={18}/></button>
           </div>
@@ -193,6 +213,50 @@ export default function PeoplePage() {
             <div style={{display:'flex',gap:12,justifyContent:'flex-end', marginTop:10}}>
               <button onClick={()=>setShowLeave(null)} style={{padding:'10px 24px',borderRadius:10,background:'transparent',border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:13,fontWeight:600}}>ยกเลิก</button>
               <button onClick={requestLeave} style={{padding:'12px 30px',borderRadius:12,background:C.gold,border:'none',color:'#fff',cursor:'pointer',fontSize:14,fontWeight:800}}>ยืนยันการลา</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showReview&&(
+        <Modal title={`AI Performance Insights — ${employees.find(e=>e.id===showReview.empId)?.name}`} onClose={()=>setShowReview(null)} width={600}>
+          <div style={{display:'flex',flexDirection:'column',gap:16, animation:'fadeIn 0.3s ease'}}>
+            <div style={{background:`${C.purple}10`, border:`1px solid ${C.purple}33`, borderRadius:20, padding:24, display:'flex', alignItems:'center', gap:20}}>
+               <div style={{width:80, height:80, borderRadius:'50%', border:`4px solid ${C.purple}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, fontWeight:900, color:C.purple, background:'#fff'}}>
+                  {showReview.rating}<span style={{fontSize:14}}>/5</span>
+               </div>
+               <div style={{flex:1}}>
+                  <div style={{fontSize:16, fontWeight:800, color:C.purple, marginBottom:6}}>Gemini Performance Rating</div>
+                  <p style={{fontSize:13, color:C.text2, lineHeight:1.6}}>{showReview.summary}</p>
+               </div>
+            </div>
+            
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:16}}>
+               <div style={{background:C.surface, borderRadius:16, padding:16, border:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:13, fontWeight:800, color:C.green, marginBottom:12, display:'flex', alignItems:'center', gap:8}}><Ic n="check" s={14} c={C.green}/> จุดแข็ง</div>
+                  {showReview.strengths?.map((s:string,i:number)=>(
+                    <div key={i} style={{fontSize:12, color:C.text, marginBottom:8, paddingLeft:14, position:'relative'}}>
+                      <span style={{position:'absolute', left:0, color:C.green}}>•</span> {s}
+                    </div>
+                  ))}
+               </div>
+               <div style={{background:C.surface, borderRadius:16, padding:16, border:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:13, fontWeight:800, color:C.gold, marginBottom:12, display:'flex', alignItems:'center', gap:8}}><Ic n="trending" s={14} c={C.gold}/> ประเด็นที่ควรพัฒนา</div>
+                  {showReview.improvements?.map((s:string,i:number)=>(
+                    <div key={i} style={{fontSize:12, color:C.text, marginBottom:8, paddingLeft:14, position:'relative'}}>
+                      <span style={{position:'absolute', left:0, color:C.gold}}>•</span> {s}
+                    </div>
+                  ))}
+               </div>
+            </div>
+
+            <div style={{background:`${C.gold}10`, borderLeft:`4px solid ${C.gold}`, borderRadius:12, padding:16}}>
+               <div style={{fontSize:13, fontWeight:800, color:C.gold, marginBottom:8}}>คำแนะนำสำหรับการเติบโต (Career Path)</div>
+               <p style={{fontSize:12, color:C.text2, lineHeight:1.6}}>{showReview.advice}</p>
+            </div>
+
+            <div style={{display:'flex', gap:10, justifyContent:'flex-end', marginTop:10}}>
+               <button onClick={()=>setShowReview(null)} style={{padding:'12px 30px', borderRadius:12, background:C.purple, border:'none', color:'#fff', cursor:'pointer', fontSize:14, fontWeight:800}}>ปิดการประเมิน</button>
             </div>
           </div>
         </Modal>

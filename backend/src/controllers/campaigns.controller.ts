@@ -42,3 +42,53 @@ export async function remove(req: Request, res: Response): Promise<void> {
   await run('DELETE FROM campaigns WHERE id = $1 AND company_id = $2', [id, req.user.company_id])
   res.json({ success: true })
 }
+
+// ── POST /api/campaigns/:id/analyze ──────────────────────────────
+export async function analyzeCampaign(req: Request, res: Response): Promise<void> {
+  const { id } = req.params
+  const camp = await queryOne('SELECT * FROM campaigns WHERE id = $1 AND company_id = $2', [id, req.user.company_id])
+  if (!camp) { res.status(404).json({ error: 'ไม่พบข้อมูลแคมเปญ' }); return }
+
+  const prompt = `คุณคือผู้เชี่ยวชาญด้านการตลาดดิจิทัล (Digital Marketing Expert)
+วิเคราะห์แคมเปญโฆษณานี้:
+ชื่อแคมเปญ: ${camp.name}
+ช่องทาง: ${camp.channel}
+งบประมาณ: ${camp.budget}
+จ่ายจริง: ${camp.spent}
+Reach: ${camp.reach}
+Clicks: ${camp.clicks}
+Conversions: ${camp.conversions}
+
+ให้ประเมินในหัวข้อ:
+1. ประสิทธิภาพของแคมเปญ (ROI, CPC, Conversion Rate)
+2. จุดคุ้มทุนและการวิเคราะห์ความคุ้มค่า
+3. ไอเดียในการทำ Content สำหรับแคมเปญนี้ (เขียนมา 3 แบบ)
+4. ข้อแนะนำในการปรับปรุง (Optimization)
+
+ตอบเป็น JSON:
+{
+  "performance_score": 88,
+  "metrics": {"roi": "150%", "cpc": "฿5.20"},
+  "content_ideas": [
+    {"type": "Facebook Post", "hook": "...", "body": "..."},
+    {"type": "Email Header", "hook": "...", "body": "..."}
+  ],
+  "optimization": "คำแนะนำสั้นๆ"
+}`
+
+  try {
+    const { askGeminiJSON } = await import('../lib/gemini')
+    const result = await askGeminiJSON(prompt)
+    
+    // Log AI usage
+    await run(
+      `INSERT INTO ai_logs (id,company_id,user_id,agent,action,tokens_used,cost_thb)
+       VALUES ($1,$2,$3,'Marketing AI','วิเคราะห์แคมเปญ: ${camp.name}',600,0.18)`,
+      [newId(), req.user.company_id, req.user.id]
+    )
+
+    res.json({ data: result })
+  } catch (e) {
+    res.status(500).json({ error: 'AI วิเคราะห์ล้มเหลว' })
+  }
+}

@@ -50,6 +50,8 @@ export const api = {
     request<{ data: any }>(`/api/employees/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteEmployee: (id: string) =>
     request<{ success: boolean }>(`/api/employees/${id}`, { method: 'DELETE' }),
+  reviewEmployee: (id: string) =>
+    request<{ data: any }>(`/api/employees/${id}/review`, { method: 'POST' }),
 
   // ── Transactions ─────────────────────────────────────────────
   getTransactions: () => request<{ data: any[] }>('/api/transactions'),
@@ -71,6 +73,8 @@ export const api = {
     request<{ data: any }>(`/api/deals/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteDeal: (id: string) =>
     request<{ success: boolean }>(`/api/deals/${id}`, { method: 'DELETE' }),
+  analyzeLead: (id: string) =>
+    request<{ data: any }>(`/api/deals/${id}/analyze`, { method: 'POST' }),
 
   // ── Meetings ─────────────────────────────────────────────────
   getMeetings: () => request<{ data: any[] }>('/api/meetings'),
@@ -116,6 +120,8 @@ export const api = {
     }),
   deleteCampaign: (id: string) =>
     request<{ success: boolean }>(`/api/campaigns/${id}`, { method: 'DELETE' }),
+  analyzeCampaign: (id: string) =>
+    request<{ data: any }>(`/api/campaigns/${id}/analyze`, { method: 'POST' }),
 
   // ── AI Stats ─────────────────────────────────────────────────
   getAIStats: () => request<{ data: any }>('/api/ai-stats'),

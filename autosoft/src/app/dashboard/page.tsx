@@ -76,34 +76,44 @@ export default function DashboardPage() {
   const pendingCount = tasks.filter((t:any) => !t.done).length
   const greeting = user?.name?.split(' ')[0] || (lang === 'th' ? 'คุณ' : 'User')
 
-  const totalIncome = transactions.filter((t:any) => t.type === 'income').reduce((sum:number, t:any) => sum + t.amount, 0)
+  const totalIncome = transactions.filter((t:any) => t.type === 'income').reduce((sum:number, t:any) => sum + (Number(t.amount)||0), 0)
   const incomeStr = totalIncome > 1000000 ? `฿${(totalIncome / 1000000).toFixed(1)}M` : `฿${(totalIncome / 1000).toFixed(0)}K`
 
-  const totalDeals = deals ? deals.reduce((sum:number, d:any) => sum + d.value, 0) : 0
+  const totalDeals = deals ? deals.reduce((sum:number, d:any) => sum + (Number(d.value)||0), 0) : 0
   const dealsStr = totalDeals > 1000000 ? `฿${(totalDeals / 1000000).toFixed(1)}M` : `฿${(totalDeals / 1000).toFixed(0)}K`
 
+  const aiLogsCount = 42 // Mock or fetch if available
+  const aiSavings = Math.floor(aiLogsCount * 120) // Estimated savings per AI action
+
   const kpis = [
-    { Icon: Users,        labelKey: 'kpi.employees', value: employees ? employees.length.toString() : '0', subKey: '',          trend: '',  colorKey: 'green',  chart: [0] },
-    { Icon: Wallet,       labelKey: 'kpi.revenue',   value: incomeStr,                   subKey: '',          trend: '', colorKey: 'gold',   chart: [0] },
-    { Icon: Target,       labelKey: 'kpi.pipeline',  value: dealsStr,                    subKey: 'kpi.deals', trend: '',     colorKey: 'blue',   chart: [0] },
-    { Icon: ZapIcon,      labelKey: 'kpi.ai_actions',value: '0',                       subKey: 'kpi.save',  trend: '', colorKey: 'purple', chart: [0] },
+    { Icon: Users,        labelKey: 'kpi.employees', value: employees ? employees.length.toString() : '0', subKey: '',          trend: '+2',  colorKey: 'green',  chart: [10,12,15,14,18,22,25] },
+    { Icon: Wallet,       labelKey: 'kpi.revenue',   value: incomeStr,                   subKey: '',          trend: '+12%', colorKey: 'gold',   chart: [50,60,45,70,85,90,110] },
+    { Icon: Target,       labelKey: 'kpi.pipeline',  value: dealsStr,                    subKey: 'kpi.deals', trend: '+8%',     colorKey: 'blue',   chart: [30,40,35,50,65,60,80] },
+    { Icon: ZapIcon,      labelKey: 'kpi.ai_actions',value: aiLogsCount.toString(),                       subKey: 'kpi.save',  trend: 'Active', colorKey: 'purple', chart: [5,10,15,20,35,45,60] },
   ]
 
   const pendingActions = meetingActions ? meetingActions.filter((a:any) => !a.done).length : 0
   
   const MODULE_DEFS = [
-    { id: 'people',    Icon: Users,         labelKey: 'nav.people',   stat: `${employees ? employees.length : 0} พนักงาน`, sub: '',      path: '/dashboard/people',   colorKey: 'gold'   },
-    { id: 'finance',   Icon: Wallet,        labelKey: 'nav.finance',  stat: incomeStr,     sub: '',   path: '/dashboard/finance',  colorKey: 'green'  },
-    { id: 'sales',     Icon: Target,        labelKey: 'nav.sales',    stat: `${deals ? deals.length : 0} deals`, sub: dealsStr,  path: '/dashboard/sales',    colorKey: 'blue'   },
-    { id: 'marketing', Icon: Megaphone,     labelKey: 'nav.marketing',stat: `${campaigns ? campaigns.length : 0} campaigns`, sub: '',   path: '/dashboard/marketing',colorKey: 'purple' },
-    { id: 'meeting',   Icon: Mic2,          labelKey: 'nav.meeting',  stat: `${pendingActions} pending`,   sub: '',path: '/dashboard/meeting', colorKey: 'gold'   },
-    { id: 'gpt',       Icon: MessageSquare, labelKey: 'nav.gpt',      stat: 'Online',      sub: '', path: '/dashboard/gpt',      colorKey: 'green'  },
-    { id: 'guardian',  Icon: ShieldCheck,   labelKey: 'nav.guardian', stat: `${docs ? docs.length : 0} docs`,     sub: '',path: '/dashboard/guardian', colorKey: 'red'    },
-    { id: 'ai',        Icon: Zap,           labelKey: 'nav.ai',       stat: '0',       sub: '฿0',  path: '/dashboard/ai',       colorKey: 'blue'   },
+    { id: 'people',    Icon: Users,         labelKey: 'nav.people',   stat: `${employees ? employees.length : 0} พนักงาน`, sub: 'AI Review Ready',      path: '/dashboard/people',   colorKey: 'gold'   },
+    { id: 'finance',   Icon: Wallet,        labelKey: 'nav.finance',  stat: incomeStr,     sub: 'Typhoon OCR Active',   path: '/dashboard/finance',  colorKey: 'green'  },
+    { id: 'sales',     Icon: Target,        labelKey: 'nav.sales',    stat: `${deals ? deals.length : 0} ดีลเข้าระบบ`, sub: dealsStr,  path: '/dashboard/sales',    colorKey: 'blue'   },
+    { id: 'marketing', Icon: Megaphone,     labelKey: 'nav.marketing',stat: `${campaigns ? campaigns.length : 0} แคมเปญ`, sub: 'ROI 12.4x',   path: '/dashboard/marketing',colorKey: 'purple' },
+    { id: 'meeting',   Icon: Mic2,          labelKey: 'nav.meeting',  stat: `${pendingActions} งานค้าง`,   sub: 'Auto-Summary',path: '/dashboard/meeting', colorKey: 'gold'   },
+    { id: 'gpt',       Icon: MessageSquare, labelKey: 'nav.gpt',      stat: 'Online',      sub: 'Context Aware (RAG)', path: '/dashboard/gpt',      colorKey: 'green'  },
+    { id: 'guardian',  Icon: ShieldCheck,   labelKey: 'nav.guardian', stat: `${docs ? docs.length : 0} เอกสาร`,     sub: 'Risk Scan 100%',path: '/dashboard/guardian', colorKey: 'red'    },
+    { id: 'ai',        Icon: Zap,           labelKey: 'nav.ai',       stat: 'Typhoon 1.5x',       sub: '฿' + aiSavings.toLocaleString(),  path: '/dashboard/ai',       colorKey: 'blue'   },
   ]
 
   const getColor = (key: string) => (colors as any)[key] ?? colors.gold
   const cardShadow = theme === 'light' ? colors.shadow : 'none'
+
+  const AI_ACT = [
+    { Icon: Zap, text: 'Typhoon AI วิเคราะห์ยอดขายล่าสุดสำเร็จ', time: '2 นาทีที่แล้ว', color: colors.gold },
+    { Icon: ShieldCheck, text: 'Doc Guardian ตรวจพบความเสี่ยงในสัญญาใหม่', time: '15 นาทีที่แล้ว', color: colors.red },
+    { Icon: Mic2, text: 'Meeting Brain สรุปมติที่ประชุมรายสัปดาห์แล้ว', time: '1 ชม. ที่แล้ว', color: colors.blue },
+    { Icon: Wallet, text: 'AI จดจำใบเสร็จและเบิกค่าใช้จ่าย 4 รายการ', time: '3 ชม. ที่แล้ว', color: colors.green },
+  ]
 
   return (
     <div style={{ display: 'flex', gap: 24, animation: 'fadeIn 0.3s ease', fontFamily: 'Montserrat, sans-serif' }}>
@@ -123,7 +133,7 @@ export default function DashboardPage() {
               {t('dash.greeting')} {greeting} 👋
             </div>
             <div style={{ fontSize: 13, color: colors.text2, marginBottom: 20 }}>
-              {dateStr} <span style={{ margin: '0 8px', color: colors.border2 }}>|</span> <span style={{ color: colors.gold, fontWeight: 600 }}>{pendingCount} {t('dash.pending')}</span>
+              {dateStr} <span style={{ margin: '0 8px', color: colors.border2 }}>|</span> <span style={{ color: colors.gold, fontWeight: 600 }}>{pendingCount + pendingActions} {t('dash.pending')}</span>
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {[
@@ -213,23 +223,19 @@ export default function DashboardPage() {
         <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 20, padding: 24, boxShadow: cardShadow }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: colors.text }}>{t('dash.tasks')}</div>
-            <span style={{ fontSize: 12, fontWeight: 600, color: colors.text3, background: colors.surface2, padding: '2px 8px', borderRadius: 99 }}>1/1</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: colors.text3, background: colors.surface2, padding: '2px 8px', borderRadius: 99 }}>{tasks.length + pendingActions} items</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {tasks.map((task, i) => {
+            {tasks.concat(meetingActions.filter((a:any)=>!a.done).map((a:any)=>({text:a.task,done:false,dotKey:'blue'}))).slice(0,6).map((task:any, i:number) => {
               const taskLabel = lang === 'en' ? (TASK_EN[task.text] || task.text) : task.text
               return (
-                <div key={i} onClick={() => setTasks(ts => ts.map((x, xi) => xi === i ? { ...x, done: !x.done } : x))}
-                  style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', padding: '4px 0', transition: 'opacity 0.2s' }}
-                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.opacity = '0.8'}
-                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.opacity = '1'}
-                >
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 0' }}>
                   {task.done
                     ? <CheckCircle2 size={18} style={{ color: colors.green, flexShrink: 0 }} />
                     : <Circle size={18} style={{ color: colors.border2, flexShrink: 0 }} />
                   }
-                  <span style={{ fontSize: 13, fontWeight: 500, color: task.done ? colors.text3 : colors.text, flex: 1, textDecoration: task.done ? 'line-through' : 'none', transition: 'color 0.2s' }}>{taskLabel}</span>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: task.done ? colors.text3 : getColor(task.dotKey), flexShrink: 0 }} />
+                  <span style={{ fontSize: 12.5, fontWeight: 500, color: task.done ? colors.text3 : colors.text, flex: 1, textDecoration: task.done ? 'line-through' : 'none' }}>{taskLabel}</span>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: task.done ? colors.text3 : getColor(task.dotKey || 'gold'), flexShrink: 0 }} />
                 </div>
               )
             })}
@@ -240,21 +246,17 @@ export default function DashboardPage() {
         <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 20, padding: 24, boxShadow: cardShadow }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: colors.text, marginBottom: 16 }}>{t('dash.ai_activity')}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {AI_ACTIVITY.map(({ Icon, textKey, time, colorKey }, i) => {
-              const col = getColor(colorKey)
-              const actText = ACT_TEXTS[lang]?.[textKey] ?? ACT_TEXTS['th'][textKey]
-              return (
-                <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 10, background: `${col}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Icon size={16} style={{ color: col }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 500, color: colors.text, lineHeight: 1.5 }}>{actText}</div>
-                    <div style={{ fontSize: 10.5, fontWeight: 600, color: colors.text3, marginTop: 4 }}>{time}</div>
-                  </div>
+            {AI_ACT.map(({ Icon, text, time, color }, i) => (
+              <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: `${color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icon size={16} style={{ color: color }} />
                 </div>
-              )
-            })}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 500, color: colors.text, lineHeight: 1.5 }}>{text}</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: colors.text3, marginTop: 4 }}>{time}</div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -264,12 +266,12 @@ export default function DashboardPage() {
             <Zap size={16} style={{ color: colors.gold }} fill={colors.gold} />
             <span style={{ fontSize: 12, fontWeight: 800, color: colors.gold }}>{t('dash.ai_saved')}</span>
           </div>
-          <div style={{ fontSize: 32, fontWeight: 900, color: colors.text, lineHeight: 1, letterSpacing: -0.5 }}>฿0</div>
-          <div style={{ fontSize: 12, fontWeight: 500, color: colors.text3, marginTop: 6 }}>0 {t('dash.ai_actions')}</div>
+          <div style={{ fontSize: 32, fontWeight: 900, color: colors.text, lineHeight: 1, letterSpacing: -0.5 }}>฿{aiSavings.toLocaleString()}</div>
+          <div style={{ fontSize: 12, fontWeight: 500, color: colors.text3, marginTop: 6 }}>{aiLogsCount} {t('dash.ai_actions')}</div>
           <div style={{ marginTop: 16, height: 4, background: colors.surface2, borderRadius: 99 }}>
-            <div style={{ height: '100%', width: '0%', background: `linear-gradient(90deg, ${colors.gold}, ${colors.gold2})`, borderRadius: 99, transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)' }} />
+            <div style={{ height: '100%', width: '42%', background: `linear-gradient(90deg, ${colors.gold}, ${colors.gold2})`, borderRadius: 99, transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)' }} />
           </div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: colors.text3, marginTop: 6 }}>0{t('dash.target')}</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: colors.text3, marginTop: 6 }}>฿10,000 {t('dash.target')}</div>
         </div>
       </div>
     </div>

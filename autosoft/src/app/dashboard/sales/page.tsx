@@ -59,6 +59,22 @@ export default function SalesPage() {
     }
   }
 
+  const [showAnalysis, setShowAnalysis] = useState<any>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+
+  const runLeadAnalysis = async (deal: any) => {
+    setAnalyzing(true)
+    try {
+      const res = await api.analyzeLead(deal.id)
+      setShowAnalysis({ ...res.data, dealId: deal.id })
+      setShowDetail(null)
+    } catch (err: any) {
+      showToast('AI วิเคราะห์ล้มเหลว', 'error')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
   const generateEmail = async (deal: any) => {
     setEmailTarget(deal); setGenerating(true); setAiEmail('')
     try {
@@ -174,7 +190,7 @@ export default function SalesPage() {
               <div key={stage} style={{minWidth:220,background:'rgba(255,255,255,0.02)',border:`1px solid ${C.border}`,borderRadius:18,padding:14,display:'flex',flexDirection:'column',gap:12,flexShrink:0}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                   <span style={{fontSize:13,fontWeight:800,color:C.text}}>{stage}</span>
-                  <Badge type="gold" style={{fontSize:10, padding:'2px 8px'}}>{sd.length}</Badge>
+                  <Badge type="gold">{sd.length}</Badge>
                 </div>
                 <div style={{fontSize:11,color:C.text3, fontWeight:600}}>Value: ฿{(sv/1000).toFixed(1)}K</div>
 
@@ -285,9 +301,9 @@ export default function SalesPage() {
         <Modal title={`รายละเอียด: ${showDetail.name}`} onClose={()=>setShowDetail(null)} width={550}>
           <div style={{display:'flex',flexDirection:'column',gap:18}}>
             <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
-              <Badge type="gold" style={{fontSize:12, padding:'4px 12px'}}>{showDetail.stage}</Badge>
-              <Badge type={showDetail.prob>70?'green':showDetail.prob>40?'gold':'red'} style={{fontSize:12, padding:'4px 12px'}}>Win Rate {showDetail.prob}%</Badge>
-              <Badge type="blue" style={{fontSize:12, padding:'4px 12px'}}>Value ฿{Number(showDetail.value).toLocaleString()}</Badge>
+              <Badge type="gold">{showDetail.stage}</Badge>
+              <Badge type={showDetail.prob>70?'green':showDetail.prob>40?'gold':'red'}>Win Rate {showDetail.prob}%</Badge>
+              <Badge type="blue">Value ฿{Number(showDetail.value).toLocaleString()}</Badge>
             </div>
 
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
@@ -327,12 +343,60 @@ export default function SalesPage() {
             </div>
 
             <div style={{display:'flex',gap:10,paddingTop:16,borderTop:`1px solid ${C.border}`}}>
+              <button onClick={()=>runLeadAnalysis(showDetail)} disabled={analyzing} style={{flex:2,display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'12px',borderRadius:12,background:C.blueL,border:`1px solid ${C.blue}44`,color:C.blue,cursor:'pointer',fontSize:13,fontWeight:700}}>
+                {analyzing ? <div style={{animation:'spin 1s linear infinite'}}><Ic n="cpu" s={16}/></div> : <Ic n="zap" s={16}/>}
+                {analyzing ? 'AI กำลังวิเคราะห์ดีล...' : 'วิเคราะห์ดีลด้วย AI'}
+              </button>
               <button onClick={()=>{generateEmail(showDetail);setShowDetail(null);}} style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'12px',borderRadius:12,background:C.goldLight,border:`1px solid ${C.gold}44`,color:C.gold,cursor:'pointer',fontSize:13,fontWeight:700}}>
-                <Ic n="mail" s={16}/>ร่างอีเมลด้วย AI
+                <Ic n="mail" s={16}/>ร่างอีเมล
               </button>
               <button onClick={()=>deleteDeal(showDetail.id)} style={{padding:'12px 16px',borderRadius:12,background:C.redL,border:`1px solid ${C.red}44`,color:C.red,cursor:'pointer'}}>
                 <Ic n="trash" s={18}/>
               </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showAnalysis&&(
+        <Modal title={`AI Sales Strategy — ${deals.find(d=>d.id===showAnalysis.dealId)?.name}`} onClose={()=>setShowAnalysis(null)} width={600}>
+          <div style={{display:'flex',flexDirection:'column',gap:16, animation:'fadeIn 0.3s ease'}}>
+            <div style={{background:`${C.blue}10`, border:`1px solid ${C.blue}33`, borderRadius:20, padding:24, display:'flex', alignItems:'center', gap:20}}>
+               <div style={{width:80, height:80, borderRadius:'50%', border:`4px solid ${C.blue}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:24, fontWeight:900, color:C.blue, background:'#fff'}}>
+                  {showAnalysis.score}<span style={{fontSize:14}}>%</span>
+               </div>
+               <div style={{flex:1}}>
+                  <div style={{fontSize:16, fontWeight:800, color:C.blue, marginBottom:6}}>Gemini Sales Potential</div>
+                  <p style={{fontSize:13, color:C.text2, lineHeight:1.6}}>{showAnalysis.summary}</p>
+               </div>
+            </div>
+            
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:16}}>
+               <div style={{background:C.surface, borderRadius:16, padding:16, border:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:13, fontWeight:800, color:C.green, marginBottom:12, display:'flex', alignItems:'center', gap:8}}><Ic n="check" s={14} c={C.green}/> กลยุทธ์การขาย</div>
+                  {showAnalysis.strategies?.map((s:string,i:number)=>(
+                    <div key={i} style={{fontSize:12, color:C.text, marginBottom:8, paddingLeft:14, position:'relative'}}>
+                      <span style={{position:'absolute', left:0, color:C.green}}>•</span> {s}
+                    </div>
+                  ))}
+               </div>
+               <div style={{background:C.surface, borderRadius:16, padding:16, border:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:13, fontWeight:800, color:C.red, marginBottom:12, display:'flex', alignItems:'center', gap:8}}><Ic n="zap" s={14} c={C.red}/> ความเสี่ยง/อุปสรรค</div>
+                  {showAnalysis.risks?.map((s:string,i:number)=>(
+                    <div key={i} style={{fontSize:12, color:C.text, marginBottom:8, paddingLeft:14, position:'relative'}}>
+                      <span style={{position:'absolute', left:0, color:C.red}}>•</span> {s}
+                    </div>
+                  ))}
+               </div>
+            </div>
+
+            <div style={{background:`${C.green}10`, borderLeft:`4px solid ${C.green}`, borderRadius:12, padding:16}}>
+               <div style={{fontSize:13, fontWeight:800, color:C.green, marginBottom:8}}>สิ่งที่ควรทำต่อไป (Next Best Action)</div>
+               <p style={{fontSize:12, color:C.text2, lineHeight:1.6}}>{showAnalysis.next_action}</p>
+            </div>
+
+            <div style={{display:'flex', gap:10, justifyContent:'flex-end', marginTop:10}}>
+               <button onClick={()=>setShowAnalysis(null)} style={{padding:'12px 30px', borderRadius:12, background:C.blue, border:'none', color:'#fff', cursor:'pointer', fontSize:14, fontWeight:800}}>ปิดการวิเคราะห์</button>
             </div>
           </div>
         </Modal>

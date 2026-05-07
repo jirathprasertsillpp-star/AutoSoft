@@ -46,3 +46,50 @@ export async function remove(req: Request, res: Response): Promise<void> {
   await run('DELETE FROM deals WHERE id = $1 AND company_id = $2', [id, req.user.company_id])
   res.json({ success: true })
 }
+
+// ── POST /api/deals/:id/analyze ──────────────────────────────────
+export async function analyzeLead(req: Request, res: Response): Promise<void> {
+  const { id } = req.params
+  const deal = await queryOne('SELECT * FROM deals WHERE id = $1 AND company_id = $2', [id, req.user.company_id])
+  if (!deal) { res.status(404).json({ error: 'ไม่พบข้อมูลดีล' }); return }
+
+  const prompt = `คุณคือผู้เชี่ยวชาญด้านการขาย (Sales Strategist)
+วิเคราะห์ดีลงานขายนี้:
+ชื่อดีล: ${deal.name}
+มูลค่า: ${deal.value}
+ขั้นตอน: ${deal.stage}
+โอกาสปิดการขาย: ${deal.probability}%
+ติดต่อ: ${deal.contact}
+บันทึก: ${deal.notes}
+
+ให้ประเมินในหัวข้อ:
+1. โอกาสปิดการขายจริง (Realistic Probability)
+2. อุปสรรคที่อาจเกิดขึ้น
+3. กลยุทธ์ในการปิดการขาย (Closing Strategy)
+4. สิ่งที่ควรทำต่อไป (Next Best Action)
+
+ตอบเป็น JSON:
+{
+  "score": 85,
+  "summary": "สรุปสั้นๆ",
+  "strategies": ["กลยุทธ์ 1", "กลยุทธ์ 2"],
+  "risks": ["ความเสี่ยง 1"],
+  "next_action": "งานที่ควรทำทันที"
+}`
+
+  try {
+    const { askGeminiJSON } = await import('../lib/gemini')
+    const result = await askGeminiJSON(prompt)
+    
+    // Log AI usage
+    await run(
+      `INSERT INTO ai_logs (id,company_id,user_id,agent,action,tokens_used,cost_thb)
+       VALUES ($1,$2,$3,'Sales AI','วิเคราะห์ดีล: ${deal.name}',500,0.15)`,
+      [newId(), req.user.company_id, req.user.id]
+    )
+
+    res.json({ data: result })
+  } catch (e) {
+    res.status(500).json({ error: 'AI วิเคราะห์ล้มเหลว' })
+  }
+}

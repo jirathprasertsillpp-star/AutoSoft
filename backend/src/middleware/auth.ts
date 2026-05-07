@@ -5,7 +5,7 @@ import { queryOne } from '../lib/db'
 const JWT_SECRET = process.env.JWT_SECRET || 'autosoft_super_secret_2026'
 
 export async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const token = req.headers.authorization?.replace('Bearer ', '')
+  const token = (req.headers.authorization?.replace('Bearer ', '')) || (req.query.token as string)
   if (!token) { res.status(401).json({ error: 'Unauthorized — no token' }); return }
 
   try {

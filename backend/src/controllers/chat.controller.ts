@@ -41,17 +41,32 @@ export async function sendMessage(req: Request, res: Response): Promise<void> {
     .join('\n')
 
   const companyName = companies?.name || 'บริษัท'
+
+  // ── RAG: Fetch Deep Context ──────────────────────────────────
+  const [mtgs, docs, emps, txs] = await Promise.all([
+    queryAll('SELECT title, summary, decisions FROM meetings WHERE company_id = $1 ORDER BY date DESC LIMIT 3', [company_id]),
+    queryAll('SELECT name, type, summary FROM documents WHERE company_id = $1 ORDER BY created_at DESC LIMIT 3', [company_id]),
+    queryAll('SELECT name, role, department FROM users WHERE company_id = $1 AND status = "active"', [company_id]),
+    queryAll('SELECT SUM(amount) as total FROM transactions WHERE company_id = $1', [company_id])
+  ])
+
+  const contextData = `
+ข้อมูลบริษัทเรียลไทม์:
+• พนักงานทั้งหมด: ${emps.length} คน (${emps.slice(0,5).map((e:any)=>e.name).join(', ')}...)
+• สรุปการเงิน: ยอดเงินหมุนเวียนรวม ฿${Number(txs[0]?.total || 0).toLocaleString()}
+• การประชุมล่าสุด: ${mtgs.map((m:any)=>`[${m.title}: ${m.summary}]`).join(', ')}
+• เอกสารสำคัญล่าสุด: ${docs.map((d:any)=>`[${d.name} (${d.type}): ${d.summary}]`).join(', ')}
+`
+
   const prompt = `คุณคือ Company GPT ผู้ช่วย AI อัจฉริยะของ ${companyName}
-คุณมีความเชี่ยวชาญด้าน HR, กฎหมายแรงงาน, การจัดการองค์กร, นโยบายบริษัท และธุรกิจทั่วไป
+คุณมีความเชี่ยวชาญด้าน HR, กฎหมายแรงงาน, การจัดการองค์กร, และข้อมูลภายในบริษัท
 ตอบเป็นภาษาไทยที่กระชับ ชัดเจน เป็นมิตร และให้ข้อมูลที่ถูกต้อง
 
-นโยบาย HR ของบริษัท:
-• วันลาพักร้อน: 15 วัน/ปี (หลังทำงาน 1 ปี)
-• วันลาป่วย: 30 วัน/ปี (มีใบรับรองแพทย์)
-• วันลากิจ: 3 วัน/ปี
-• เงินเดือน: วันที่ 25 ของทุกเดือน
-• OT: x1.5 วันธรรมดา, x2 วันหยุด
-• ประกันสังคม: 5% ของเงินเดือน (สูงสุด 750 บาท/เดือน)
+${contextData}
+
+นโยบาย HR พื้นฐาน:
+• วันลาพักร้อน: 15 วัน/ปี, วันลาป่วย: 30 วัน/ปี, วันลากิจ: 3 วัน/ปี
+• เงินเดือนออก: วันที่ 25, ประกันสังคม: 5% (สูงสุด 750 บาท)
 
 ประวัติการสนทนา:
 ${historyText}

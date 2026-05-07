@@ -137,24 +137,11 @@ export default function FinancePage() {
   }
 
   const exportCSV = () => {
-    const headers = ['Date', 'Description', 'Amount', 'Type', 'Category', 'Status']
-    const rows = transactions.map(t => [
-      t.date,
-      `"${(t.description || t.desc || '').replace(/"/g, '""')}"`,
-      t.amount,
-      t.type,
-      t.category || t.cat,
-      t.status
-    ])
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n")
-    const blob = new Blob([`\ufeff${csvContent}`], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement("a")
-    link.href = URL.createObjectURL(blob)
-    link.setAttribute("download", `autosoft_finance_${new Date().toISOString().slice(0,10)}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    showToast('Export CSV สำเร็จ')
+    // We use a direct link to the backend endpoint for the most accurate server-side data
+    const token = localStorage.getItem('autosoft_token')
+    const url = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/transactions/export/csv?token=${token}`
+    window.open(url, '_blank')
+    showToast('กำลังดาวน์โหลด CSV...')
   }
 
   const handlePrint = () => {

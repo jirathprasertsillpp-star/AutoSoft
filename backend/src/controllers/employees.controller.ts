@@ -56,3 +56,48 @@ export async function remove(req: Request, res: Response): Promise<void> {
   await run('DELETE FROM users WHERE id = $1 AND company_id = $2', [id, req.user.company_id])
   res.json({ success: true })
 }
+
+// ── POST /api/employees/:id/review ───────────────────────────────
+export async function reviewPerformance(req: Request, res: Response): Promise<void> {
+  const { id } = req.params
+  const emp = await queryOne('SELECT * FROM users WHERE id = $1 AND company_id = $2', [id, req.user.company_id])
+  if (!emp) { res.status(404).json({ error: 'ไม่พบข้อมูลพนักงาน' }); return }
+
+  const prompt = `คุณคือผู้เชี่ยวชาญด้านทรัพยากรบุคคล (HR Expert)
+วิเคราะห์ประสิทธิภาพการทำงานของพนักงานคนนี้:
+ชื่อ: ${emp.name}
+ตำแหน่ง: ${emp.role}
+แผนก: ${emp.department}
+เงินเดือน: ${emp.salary}
+
+ให้ประเมินในหัวข้อ:
+1. จุดแข็งและศักยภาพ
+2. ประเด็นที่ควรปรับปรุง
+3. ข้อแนะนำในการพัฒนาอาชีพ (Career Path)
+4. การพิจารณาเงินเดือน/โบนัส
+
+ตอบเป็น JSON:
+{
+  "rating": 4.5,
+  "summary": "สรุปภาพรวม",
+  "strengths": ["ข้อดี 1", "ข้อดี 2"],
+  "improvements": ["สิ่งที่ต้องแก้ 1"],
+  "advice": "คำแนะนำสั้นๆ"
+}`
+
+  try {
+    const { askGeminiJSON } = await import('../lib/gemini')
+    const result = await askGeminiJSON(prompt)
+    
+    // Log AI usage
+    await run(
+      `INSERT INTO ai_logs (id,company_id,user_id,agent,action,tokens_used,cost_thb)
+       VALUES ($1,$2,$3,'HR AI','ประเมินผล: ${emp.name}',400,0.12)`,
+      [newId(), req.user.company_id, req.user.id]
+    )
+
+    res.json({ data: result })
+  } catch (e) {
+    res.status(500).json({ error: 'AI ประเมินผลล้มเหลว' })
+  }
+}

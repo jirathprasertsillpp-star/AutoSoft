@@ -57,6 +57,26 @@ export async function updateStatus(req: Request, res: Response): Promise<void> {
   res.json({ data })
 }
 
+// ── GET /api/transactions/export/csv ─────────────────────────────
+export async function exportCSV(req: Request, res: Response): Promise<void> {
+  const data = await queryAll(
+    'SELECT date, description, amount, type, category, status FROM transactions WHERE company_id = $1 ORDER BY date DESC',
+    [req.user.company_id],
+  )
+
+  const header = 'Date,Description,Amount,Type,Category,Status\n'
+  const csv = data.map((t: any) => {
+    // Escape quotes and handle commas
+    const desc = `"${(t.description || '').replace(/"/g, '""')}"`
+    const cat = `"${(t.category || '').replace(/"/g, '""')}"`
+    return `${t.date},${desc},${t.amount},${t.type},${cat},${t.status}`
+  }).join('\n')
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  res.setHeader('Content-Disposition', `attachment; filename=autosoft-export-${new Date().toISOString().slice(0, 10)}.csv`)
+  res.send('\uFEFF' + header + csv) // BOM for Excel Thai characters
+}
+
 // ── DELETE /api/transactions/:id ──────────────────────────────────
 export async function remove(req: Request, res: Response): Promise<void> {
   const { id } = req.params
