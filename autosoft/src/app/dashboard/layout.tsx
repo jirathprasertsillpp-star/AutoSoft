@@ -154,6 +154,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{ fontSize: 14, fontWeight: 800, color: colors.text, letterSpacing: 1.5, whiteSpace: 'nowrap', lineHeight: 1.2 }}>AUTOSOFT</div>
               <div style={{ fontSize: 9, color: colors.text3, letterSpacing: 2.5, whiteSpace: 'nowrap' }}>{t('login.tagline')}</div>
+              <div style={{ fontSize: 8, color: colors.gold, marginTop: 4, fontWeight: 900, opacity: 0.8, letterSpacing: 1 }}>TYPHOON v2.0 READY</div>
             </div>
           )}
         </div>
