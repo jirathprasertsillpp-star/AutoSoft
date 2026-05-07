@@ -60,11 +60,11 @@ export function getUser(): any {
   return getCachedUser()
 }
 
-export function hasAccess(user: any, module: string): boolean {
+export function hasAccess(user: any, roleRequired?: string): boolean {
   if (!user) return false
-  if (user.role === 'CEO' || user.access === 'all') return true
-  // All users have access to all modules in this version
-  return true
+  if (user.role?.toLowerCase() === 'admin') return true
+  if (!roleRequired) return true
+  return user.role?.toLowerCase() === roleRequired.toLowerCase()
 }
 
 // ─── Refresh user from API ────────────────────────────────────
