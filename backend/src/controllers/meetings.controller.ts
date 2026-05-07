@@ -143,3 +143,24 @@ export async function toggleAction(req: Request, res: Response): Promise<void> {
   await run('UPDATE action_items SET done = $1 WHERE id = $2', [newDone, id])
   res.json({ success: true, done: newDone === 1 })
 }
+
+// ── PATCH /api/meetings/:id ───────────────────────────────────────
+export async function update(req: Request, res: Response): Promise<void> {
+  const { id } = req.params
+  const { title, summary, decisions } = req.body
+
+  const meeting = await queryOne('SELECT id FROM meetings WHERE id = $1 AND company_id = $2', [id, req.user.company_id])
+  if (!meeting) { res.status(404).json({ error: 'Meeting not found' }); return }
+
+  await run(
+    'UPDATE meetings SET title = $1, summary = $2, decisions = $3 WHERE id = $4 AND company_id = $5',
+    [
+      title || '',
+      summary || '',
+      JSON.stringify(decisions || []),
+      id,
+      req.user.company_id
+    ]
+  )
+  res.json({ success: true })
+}

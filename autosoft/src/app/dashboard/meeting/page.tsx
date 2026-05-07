@@ -95,12 +95,58 @@ export default function MeetingPage() {
     }
   }
 
+  const [editing, setEditing] = useState(false)
+  const [editData, setEditData] = useState({ title: '', summary: '', decisions: [] as string[] })
+
+  const startEdit = () => {
+    if (!selectedMeeting) return
+    setEditData({
+      title: selectedMeeting.title,
+      summary: selectedMeeting.summary,
+      decisions: [...selectedMeeting.decisions]
+    })
+    setEditing(true)
+  }
+
+  const saveEdit = async () => {
+    if (!selectedMeeting) return
+    try {
+      await api.updateMeeting(selectedMeeting.id, editData)
+      const updated = { ...selectedMeeting, ...editData }
+      setSelectedMeeting(updated)
+      setMeetings(ms => ms.map(m => m.id === selectedMeeting.id ? updated : m))
+      setEditing(false)
+      showToast('บันทึกการแก้ไขแล้ว')
+    } catch (err: any) {
+      showToast('บันทึกไม่สำเร็จ', 'error')
+    }
+  }
+
+  const addDecision = () => setEditData({ ...editData, decisions: [...editData.decisions, ''] })
+  const updateDecision = (idx: number, val: string) => {
+    const next = [...editData.decisions]
+    next[idx] = val
+    setEditData({ ...editData, decisions: next })
+  }
+  const removeDecision = (idx: number) => {
+    setEditData({ ...editData, decisions: editData.decisions.filter((_, i) => i !== idx) })
+  }
+
   return (
     <div style={{display:'flex',flexDirection:'column',gap:16,animation:'fadeIn 0.3s ease'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}}>
         <div><div style={{fontSize:18,fontWeight:800,color:C.text}}>Meeting Brain AI</div><div style={{fontSize:12,color:C.text3,marginTop:2}}>สรุปการประชุมและสกัด Action Items ด้วย Gemini 2.0 Flash</div></div>
         <div style={{display:'flex',gap:8}}>
-          {stage !== 'upload' && (
+          {selectedMeeting && !editing && (
+            <button onClick={startEdit} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:10,background:C.surface,border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:12,fontWeight:700}}><Ic n="edit" s={13}/>แก้ไขข้อมูล</button>
+          )}
+          {editing && (
+            <button onClick={saveEdit} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:10,background:C.green,border:'none',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}><Ic n="check" s={13}/>บันทึก</button>
+          )}
+          {editing && (
+            <button onClick={() => setEditing(false)} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:10,background:C.surface,border:`1px solid ${C.border}`,color:C.text2,cursor:'pointer',fontSize:12,fontWeight:700}}>ยกเลิก</button>
+          )}
+          {stage !== 'upload' && !editing && (
             <button onClick={()=>setStage('upload')} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:10,background:`linear-gradient(135deg,${C.gold},${C.gold2})`,border:'none',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700}}><Ic n="plus" s={13}/>ประชุมใหม่</button>
           )}
           {stage === 'upload' && (
@@ -144,10 +190,10 @@ export default function MeetingPage() {
       {(stage==='list' || stage==='done') && (
         <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
           {/* Sidebar - Meeting List */}
-          <div style={{width:260,flexShrink:0,display:'flex',flexDirection:'column',gap:10}}>
+          <div style={{width:260,flexShrink:0,display:'flex',flexDirection:'column',gap:10}} className="no-print">
             <div style={{fontSize:12,fontWeight:800,color:C.text3, textTransform:'uppercase', letterSpacing:1}}>ประวัติการประชุม ({meetings.length})</div>
             {meetings.map(m => (
-              <div key={m.id} onClick={() => { setSelectedMeeting(m); setStage('done'); }} 
+              <div key={m.id} onClick={() => { setSelectedMeeting(m); setStage('done'); setEditing(false); }} 
                 style={{
                   background: selectedMeeting?.id === m.id ? C.goldLight : C.surface,
                   border: `1px solid ${selectedMeeting?.id === m.id ? C.gold + '44' : C.border}`,
@@ -173,37 +219,53 @@ export default function MeetingPage() {
             <div style={{flex:1, minWidth:400, display:'flex', flexDirection:'column', gap:12, animation:'fadeIn 0.3s ease'}}>
                <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:20}}>
                   <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16}}>
-                     <div>
-                        <div style={{fontSize:18, fontWeight:800, color:C.text}}>{selectedMeeting.title}</div>
+                     <div style={{flex:1}}>
+                        {editing ? (
+                          <input value={editData.title} onChange={e=>setEditData({...editData,title:e.target.value})} style={{fontSize:18, fontWeight:800, color:C.text, background:'transparent', border:`1px solid ${C.gold}44`, borderRadius:8, padding:'4px 8px', width:'100%', outline:'none'}} />
+                        ) : (
+                          <div style={{fontSize:18, fontWeight:800, color:C.text}}>{selectedMeeting.title}</div>
+                        )}
                         <div style={{fontSize:12, color:C.text3, marginTop:4}}>สรุปการประชุมโดย Gemini 2.0 • {new Date(selectedMeeting.created_at).toLocaleString('th-TH')}</div>
                      </div>
-                     <div style={{display:'flex', gap:8}}>
+                     <div style={{display:'flex', gap:8}} className="no-print">
                         <button onClick={()=>showToast('แชร์ลิงก์สำเร็จ')} style={{padding:'8px 12px', borderRadius:10, background:C.surface2, border:`1px solid ${C.border}`, color:C.text2, cursor:'pointer'}}><Ic n="send" s={14}/></button>
-                        <button onClick={()=>showToast('Export PDF สำเร็จ')} style={{padding:'8px 12px', borderRadius:10, background:C.surface2, border:`1px solid ${C.border}`, color:C.text2, cursor:'pointer'}}><Ic n="download" s={14}/></button>
+                        <button onClick={()=>window.print()} style={{padding:'8px 12px', borderRadius:10, background:C.surface2, border:`1px solid ${C.border}`, color:C.text2, cursor:'pointer'}}><Ic n="download" s={14}/></button>
                      </div>
                   </div>
 
                   <div style={{fontSize:14, fontWeight:800, color:C.gold, marginBottom:10, display:'flex', alignItems:'center', gap:8}}>
                      <Ic n="file" s={16} c={C.gold}/> สรุปใจความสำคัญ
                   </div>
-                  <div style={{fontSize:13, color:C.text2, lineHeight:1.8, whiteSpace:'pre-wrap', background:`${C.gold}05`, padding:16, borderRadius:12, border:`1px solid ${C.gold}15`}}>
-                     {selectedMeeting.summary}
-                  </div>
-                  
-                  {selectedMeeting.decisions && JSON.parse(selectedMeeting.decisions || '[]').length > 0 && (
-                    <div style={{marginTop:20}}>
-                       <div style={{fontSize:14, fontWeight:800, color:C.green, marginBottom:10, display:'flex', alignItems:'center', gap:8}}>
-                          <Ic n="check" s={16} c={C.green}/> มติที่ประชุม / การตัดสินใจ
-                       </div>
-                       <div style={{display:'flex', flexDirection:'column', gap:8}}>
-                          {JSON.parse(selectedMeeting.decisions || '[]').map((d:string, i:number) => (
-                             <div key={i} style={{fontSize:13, color:C.text, background:C.surface2, padding:'10px 14px', borderRadius:10, borderLeft:`4px solid ${C.green}`}}>
-                                {d}
-                             </div>
-                          ))}
-                       </div>
+                  {editing ? (
+                    <textarea value={editData.summary} onChange={e=>setEditData({...editData,summary:e.target.value})} style={{fontSize:13, color:C.text2, lineHeight:1.8, width:'100%', minHeight:150, background:`${C.gold}05`, padding:16, borderRadius:12, border:`1px solid ${C.gold}44`, outline:'none', fontFamily:'inherit'}} />
+                  ) : (
+                    <div style={{fontSize:13, color:C.text2, lineHeight:1.8, whiteSpace:'pre-wrap', background:`${C.gold}05`, padding:16, borderRadius:12, border:`1px solid ${C.gold}15`}}>
+                       {selectedMeeting.summary}
                     </div>
                   )}
+                  
+                  <div style={{marginTop:20}}>
+                     <div style={{fontSize:14, fontWeight:800, color:C.green, marginBottom:10, display:'flex', alignItems:'center', gap:8, justifyContent:'space-between'}}>
+                        <div style={{display:'flex', alignItems:'center', gap:8}}><Ic n="check" s={16} c={C.green}/> มติที่ประชุม / การตัดสินใจ</div>
+                        {editing && <button onClick={addDecision} style={{fontSize:10, padding:'4px 8px', borderRadius:6, background:C.greenL, border:`1px solid ${C.green}44`, color:C.green, cursor:'pointer'}}>+ เพิ่มมติ</button>}
+                     </div>
+                     <div style={{display:'flex', flexDirection:'column', gap:8}}>
+                        {(editing ? editData.decisions : (selectedMeeting.decisions || [])).map((d:string, i:number) => (
+                           <div key={i} style={{display:'flex', gap:8, alignItems:'center'}}>
+                             {editing ? (
+                               <>
+                                 <input value={d} onChange={e=>updateDecision(i,e.target.value)} style={{flex:1, fontSize:13, color:C.text, background:C.surface2, padding:'10px 14px', borderRadius:10, borderLeft:`4px solid ${C.green}`, outline:'none'}} />
+                                 <button onClick={()=>removeDecision(i)} style={{color:C.red, background:'none', border:'none', cursor:'pointer'}}><Ic n="trash" s={14}/></button>
+                               </>
+                             ) : (
+                               <div style={{flex:1, fontSize:13, color:C.text, background:C.surface2, padding:'10px 14px', borderRadius:10, borderLeft:`4px solid ${C.green}`}}>
+                                  {d}
+                               </div>
+                             )}
+                           </div>
+                        ))}
+                     </div>
+                  </div>
                </div>
 
                <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:20}}>

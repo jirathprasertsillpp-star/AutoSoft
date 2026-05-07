@@ -78,6 +78,11 @@ export const api = {
     request<{ data: any }>('/api/meetings/analyze', { method: 'POST', body: JSON.stringify(data) }),
   toggleMeetingAction: (id: string) =>
     request<{ success: boolean }>(`/api/meetings/action/${id}`, { method: 'PATCH' }),
+  updateMeeting: (id: string, data: any) =>
+    request<{ success: boolean }>(`/api/meetings/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
 
   // ── Chat ─────────────────────────────────────────────────────
   sendMessage: (message: string, sessionId = 'default') =>
@@ -94,6 +99,11 @@ export const api = {
     request<{ data: any }>('/api/documents/analyze', { method: 'POST', body: JSON.stringify(data) }),
   deleteDocument: (id: string) =>
     request<{ success: boolean }>(`/api/documents/${id}`, { method: 'DELETE' }),
+  updateDocumentRisks: (id: string, risks: any[]) =>
+    request<{ data: any }>(`/api/documents/${id}/risks`, {
+      method: 'PATCH',
+      body: JSON.stringify({ risks }),
+    }),
 
   // ── Campaigns ────────────────────────────────────────────────
   getCampaigns: () => request<{ data: any[] }>('/api/campaigns'),

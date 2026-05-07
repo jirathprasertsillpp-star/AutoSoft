@@ -121,3 +121,19 @@ export async function remove(req: Request, res: Response): Promise<void> {
   await run('DELETE FROM documents WHERE id = $1 AND company_id = $2', [id, req.user.company_id])
   res.json({ success: true })
 }
+
+// ── PATCH /api/documents/:id/risks ───────────────────────────────
+export async function updateRisks(req: Request, res: Response): Promise<void> {
+  const { id } = req.params
+  const { risks } = req.body
+  if (!risks) { res.status(400).json({ error: 'risks data is required' }); return }
+
+  const doc = await queryOne('SELECT id FROM documents WHERE id = $1 AND company_id = $2', [id, req.user.company_id])
+  if (!doc) { res.status(404).json({ error: 'Document not found' }); return }
+
+  await run(
+    'UPDATE documents SET risks = $1 WHERE id = $2 AND company_id = $3',
+    [JSON.stringify(risks), id, req.user.company_id]
+  )
+  res.json({ success: true })
+}

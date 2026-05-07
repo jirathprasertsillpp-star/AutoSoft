@@ -60,19 +60,24 @@ export default function GuardianPage() {
   }
 
   const resolveRisk = async (docId: string, riskIdx: number) => {
-    // Note: In a real app we'd have an API to update risk status
-    // For now we'll do an optimistic local update and we can add a backend endpoint later if needed
-    const updated = docs.map(d => {
-      if (d.id === docId) {
-        const newRisks = [...d.risks];
-        newRisks[riskIdx] = { ...newRisks[riskIdx], resolved: !newRisks[riskIdx].resolved };
-        return { ...d, risks: newRisks };
-      }
-      return d;
-    });
+    const doc = docs.find(d => d.id === docId);
+    if (!doc) return;
+
+    const newRisks = [...doc.risks];
+    newRisks[riskIdx] = { ...newRisks[riskIdx], resolved: !newRisks[riskIdx].resolved };
+
+    // Optimistic update
+    const updated = docs.map(d => d.id === docId ? { ...d, risks: newRisks } : d);
     setDocs(updated);
     if (selected?.id === docId) setSelected(updated.find(d => d.id === docId));
-    showToast('อัปเดตสถานะความเสี่ยงแล้ว');
+
+    try {
+      await api.updateDocumentRisks(docId, newRisks);
+      showToast(newRisks[riskIdx].resolved ? 'แก้ไขความเสี่ยงแล้ว' : 'ยกเลิกการแก้ไขแล้ว');
+    } catch (err: any) {
+      showToast(err.message || 'อัปเดตไม่สำเร็จ', 'error');
+      refresh(); // Rollback
+    }
   }
 
   const deleteDoc = async (id: string) => {
