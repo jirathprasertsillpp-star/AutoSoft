@@ -136,6 +136,31 @@ export default function FinancePage() {
     }
   }
 
+  const exportCSV = () => {
+    const headers = ['Date', 'Description', 'Amount', 'Type', 'Category', 'Status']
+    const rows = transactions.map(t => [
+      t.date,
+      `"${(t.description || t.desc || '').replace(/"/g, '""')}"`,
+      t.amount,
+      t.type,
+      t.category || t.cat,
+      t.status
+    ])
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n")
+    const blob = new Blob([`\ufeff${csvContent}`], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement("a")
+    link.href = URL.createObjectURL(blob)
+    link.setAttribute("download", `autosoft_finance_${new Date().toISOString().slice(0,10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    showToast('Export CSV สำเร็จ')
+  }
+
+  const handlePrint = () => {
+    window.print()
+  }
+
   const filtered = filter==='all' ? transactions : transactions.filter(t=>t.status===filter||t.type===filter)
   const income   = transactions.filter(t=>t.type==='income').reduce((s,t)=>s + (Number(t.amount)||0),0)
   const expense  = transactions.filter(t=>t.type==='expense').reduce((s,t)=>s + (Number(t.amount)||0),0)
@@ -143,13 +168,26 @@ export default function FinancePage() {
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:16,animation:'fadeIn 0.3s ease'}}>
+      <style>{`
+        @media print {
+          aside, header, nav, .no-print, button { display: none !important; }
+          main { padding: 0 !important; background: white !important; }
+          .print-only { display: block !important; }
+          body { background: white !important; color: black !important; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
+      `}</style>
+
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10}}>
         <div>
           <div style={{fontSize:18,fontWeight:800,color:C.text}}>Finance Center</div>
           <div style={{fontSize:12,color:C.text3,marginTop:2}}>จัดการบัญชีและ OCR ใบเสร็จอัตโนมัติ</div>
         </div>
-        <div style={{display:'flex',gap:8}}>
-          <button onClick={()=>showToast('กำลังเตรียมไฟล์...')} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:10,background:'rgba(255,255,255,0.06)',border:`1px solid ${C.border2}`,color:C.text2,cursor:'pointer',fontSize:12,fontWeight:600}}>
+        <div style={{display:'flex',gap:8}} className="no-print">
+          <button onClick={exportCSV} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:10,background:'rgba(255,255,255,0.06)',border:`1px solid ${C.border2}`,color:C.text2,cursor:'pointer',fontSize:12,fontWeight:600}}>
+            <Ic n="file" s={13}/>Export CSV
+          </button>
+          <button onClick={handlePrint} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:10,background:'rgba(255,255,255,0.06)',border:`1px solid ${C.border2}`,color:C.text2,cursor:'pointer',fontSize:12,fontWeight:600}}>
             <Ic n="download" s={13}/>Export PDF
           </button>
           <button onClick={()=>setShowAdd(true)} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:10,background:`linear-gradient(135deg,${C.gold},${C.gold2})`,border:'none',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:700,boxShadow:`0 4px 14px ${C.gold}44`}}>
